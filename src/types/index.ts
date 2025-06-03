@@ -3,7 +3,6 @@ export interface Participant {
   name: string;
   isSpeaking: boolean;
   audioLevel: number;
-  isMuted: boolean;
   stream?: MediaStream;
 }
 

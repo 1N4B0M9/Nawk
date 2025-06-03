@@ -14,8 +14,6 @@ function App() {
     localParticipant,
     connect,
     disconnect,
-    toggleMute,
-    toggleVideo,
   } = useVoiceflow('room-demo-01');
 
   // Parse room ID from URL if present
@@ -51,8 +49,6 @@ function App() {
           roomName={roomName}
           participants={participants}
           localParticipant={localParticipant}
-          onToggleMute={toggleMute}
-          onToggleVideo={toggleVideo}
           onDisconnect={disconnect}
         />
       )}

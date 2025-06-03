@@ -1,31 +1,38 @@
 class VideoService {
-  private videoStream: MediaStream | null = null;
+  private stream: MediaStream | null = null;
+  private hasAccess: boolean = false;
 
   async getUserMedia(): Promise<MediaStream> {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
+      this.stream = await navigator.mediaDevices.getUserMedia({
         video: {
           width: { ideal: 1280 },
           height: { ideal: 720 },
-          facingMode: 'user',
+          facingMode: 'user'
         }
       });
-      
-      this.videoStream = stream;
-      return stream;
+      this.hasAccess = true;
+      return this.stream;
     } catch (error) {
-      console.error('Error getting video media:', error);
-      throw error;
+      console.warn('Could not access camera:', error);
+      this.hasAccess = false;
+      // Return an empty MediaStream when camera access is not available
+      return new MediaStream();
     }
   }
 
+  hasVideoAccess(): boolean {
+    return this.hasAccess;
+  }
+
   cleanup(): void {
-    if (this.videoStream) {
-      this.videoStream.getTracks().forEach((track) => {
+    if (this.stream) {
+      this.stream.getTracks().forEach((track) => {
         track.stop();
       });
-      this.videoStream = null;
+      this.stream = null;
     }
+    this.hasAccess = false;
   }
 }
 

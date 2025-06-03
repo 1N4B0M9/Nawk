@@ -47,24 +47,6 @@ export const useVoiceflow = (roomId: string = 'room-demo-01') => {
     }
   }, [isConnected]);
 
-  // Toggle mute state
-  const toggleMute = useCallback(() => {
-    if (!isConnected || !localParticipant) return false;
-    
-    const isMuted = webRTCService.toggleMute();
-    setLocalParticipant(prev => prev ? { ...prev, isMuted } : null);
-    return isMuted;
-  }, [isConnected, localParticipant]);
-
-  // Toggle video state
-  const toggleVideo = useCallback(() => {
-    if (!isConnected || !localParticipant) return false;
-    
-    const isEnabled = webRTCService.toggleVideo();
-    updateParticipantsState(); // Update state to reflect video changes
-    return isEnabled;
-  }, [isConnected, localParticipant]);
-
   // Update participants state from service
   const updateParticipantsState = useCallback(() => {
     const allParticipants = webRTCService.getParticipants();
@@ -108,7 +90,5 @@ export const useVoiceflow = (roomId: string = 'room-demo-01') => {
     localParticipant,
     connect,
     disconnect,
-    toggleMute,
-    toggleVideo,
   };
 };

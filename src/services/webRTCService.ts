@@ -66,6 +66,11 @@ class WebRTCService {
         ...audioStream.getTracks(),
         ...videoStream.getTracks()
       ]);
+
+      // Ensure all tracks are enabled
+      this.localStream.getTracks().forEach(track => {
+        track.enabled = true;
+      });
       
       // Add local participant
       this.participants.set(userId, {
@@ -73,7 +78,6 @@ class WebRTCService {
         name: userName,
         isSpeaking: false,
         audioLevel: 0,
-        isMuted: false,
         stream: this.localStream
       });
       
@@ -147,7 +151,6 @@ class WebRTCService {
           this.peer?.reconnect();
         });
 
-        // Timeout for connection
         setTimeout(() => {
           if (!this.isConnected) {
             reject(new Error('PeerJS connection timeout'));
@@ -163,7 +166,6 @@ class WebRTCService {
   private handleCall(call: MediaConnectionType): void {
     const peerId = call.peer;
     
-    // Clean up existing connection if any
     this.closeConnection(peerId);
     
     console.log('Setting up new call with:', peerId);
@@ -187,7 +189,7 @@ class WebRTCService {
         this.participants.set(peerId, {
           ...participant,
           stream: newStream,
-          isMuted: false
+          isSpeaking: false
         });
 
         console.log('Updated participant stream:', {
@@ -206,7 +208,6 @@ class WebRTCService {
     call.on('error', (error: Error) => {
       console.error('Call error with:', peerId, error);
       this.closeConnection(peerId);
-      // Try to reconnect
       setTimeout(() => this.callPeer(peerId), 2000);
     });
   }
@@ -221,11 +222,9 @@ class WebRTCService {
               id: userId,
               name: userName,
               isSpeaking: false,
-              audioLevel: 0,
-              isMuted: false
+              audioLevel: 0
             });
           }
-          // Delay the call slightly to ensure peer is ready
           setTimeout(() => this.callPeer(userId), 1000);
         }
       });
@@ -240,8 +239,7 @@ class WebRTCService {
           id: userId,
           name: userName,
           isSpeaking: false,
-          audioLevel: 0,
-          isMuted: false
+          audioLevel: 0
         });
       }
     });
@@ -269,7 +267,6 @@ class WebRTCService {
       this.handleCall(call);
     } catch (error) {
       console.error('Error calling peer:', peerId, error);
-      // Try again after a delay
       setTimeout(() => this.callPeer(peerId), 2000);
     }
   }
@@ -296,28 +293,23 @@ class WebRTCService {
       });
       this.participants.set(peerId, {
         ...participant,
-        stream: undefined,
-        isMuted: true
+        stream: undefined
       });
     }
   }
 
   private startVoiceActivityDetection(): void {
-    // Run voice activity detection every 100ms
     const detectInterval = setInterval(() => {
       if (!this.localStream) {
         clearInterval(detectInterval);
         return;
       }
       
-      // Get current audio level
       const audioLevel = audioService.getAudioLevel();
       
-      // Update local participant
       const localParticipant = this.participants.get(this.userId);
       if (localParticipant) {
-        // Consider speaking if audio level is above threshold
-        const isSpeaking = audioLevel > 0.1 && !localParticipant.isMuted;
+        const isSpeaking = audioLevel > 0.1;
         
         this.participants.set(this.userId, {
           ...localParticipant,
@@ -326,39 +318,6 @@ class WebRTCService {
         });
       }
     }, 100);
-  }
-
-  toggleMute(): boolean {
-    const participant = this.participants.get(this.userId);
-    if (!participant) return false;
-    
-    const newMuteState = !participant.isMuted;
-    
-    // Apply soft mute
-    audioService.softMute(newMuteState);
-    
-    // Update participant state
-    this.participants.set(this.userId, {
-      ...participant,
-      isMuted: newMuteState,
-      isSpeaking: newMuteState ? false : participant.isSpeaking,
-    });
-    
-    return newMuteState;
-  }
-
-  toggleVideo(): boolean {
-    if (!this.localStream) return false;
-    
-    const videoTracks = this.localStream.getVideoTracks();
-    const isEnabled = videoTracks.some(track => track.enabled);
-    
-    // Toggle all video tracks
-    videoTracks.forEach(track => {
-      track.enabled = !isEnabled;
-    });
-    
-    return !isEnabled;
   }
 
   getParticipants(): Participant[] {
@@ -370,23 +329,19 @@ class WebRTCService {
   }
 
   cleanup(): void {
-    // Close all connections
     this.connections.forEach(connection => {
       connection.close();
     });
     this.connections.clear();
     
-    // Close peer connection
     if (this.peer) {
       this.peer.destroy();
       this.peer = null;
     }
     
-    // Clean up audio and video services
     audioService.cleanup();
     videoService.cleanup();
     
-    // Stop local stream tracks
     if (this.localStream) {
       this.localStream.getTracks().forEach((track) => {
         track.stop();
@@ -394,12 +349,10 @@ class WebRTCService {
       this.localStream = null;
     }
     
-    // Disconnect from signaling server
     socketService.removeAllListeners();
     socketService.leaveRoom();
     socketService.disconnect();
     
-    // Clear participants
     this.participants.clear();
   }
 }
