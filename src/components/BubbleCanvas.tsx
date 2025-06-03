@@ -3,6 +3,13 @@ import styled from 'styled-components';
 import { Participant } from '../types';
 import socketService from '../services/socketService';
 
+const CONVERSATION_THRESHOLD = 200; // Distance threshold for conversations in pixels
+const BUBBLE_DIAMETER = 150; // Bubble size in pixels
+const SNAP_THRESHOLD = CONVERSATION_THRESHOLD * 0.9; // Start snapping from further away
+const SNAP_STRENGTH = 0.4; // Increased snapping force
+const MIN_DISTANCE = BUBBLE_DIAMETER * 1.2; // Minimum distance between bubbles
+const FINAL_SNAP_DISTANCE = MIN_DISTANCE * 1.1; // Distance for final snap position
+
 const CanvasContainer = styled.div`
   width: 100vw;
   height: 100vh;
@@ -11,7 +18,28 @@ const CanvasContainer = styled.div`
   overflow: hidden;
 `;
 
-const Bubble = styled.div<{ x: number; y: number; isDragging: boolean }>`
+const ConnectionLine = styled.div<{ x1: number; y1: number; x2: number; y2: number }>`
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: ${props => props.y1}px;
+    left: ${props => props.x1}px;
+    width: ${props => Math.sqrt(Math.pow(props.x2 - props.x1, 2) + Math.pow(props.y2 - props.y1, 2))}px;
+    height: 2px;
+    background: rgba(76, 175, 80, 0.3);
+    transform-origin: 0 0;
+    transform: rotate(${props => Math.atan2(props.y2 - props.y1, props.x2 - props.x1)}rad);
+  }
+`;
+
+const Bubble = styled.div<{ x: number; y: number; isDragging: boolean; isConnected: boolean }>`
   position: absolute;
   width: 150px;
   height: 150px;
@@ -24,10 +52,25 @@ const Bubble = styled.div<{ x: number; y: number; isDragging: boolean }>`
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  border: 2px solid ${props => props.isDragging ? '#4CAF50' : '#3a3a3a'};
+  border: 3px solid ${props => props.isConnected ? '#4CAF50' : '#666'};
+  box-shadow: 0 0 20px ${props => props.isConnected ? 'rgba(76, 175, 80, 0.3)' : 'transparent'};
   
   &:hover {
-    border-color: #4CAF50;
+    border-color: ${props => props.isConnected ? '#45a049' : '#888'};
+  }
+
+  &::before {
+    content: '';
+    position: absolute;
+    width: ${CONVERSATION_THRESHOLD * 2}px;
+    height: ${CONVERSATION_THRESHOLD * 2}px;
+    border: 2px dashed ${props => props.isDragging ? 'rgba(76, 175, 80, 0.3)' : 'transparent'};
+    border-radius: 50%;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    transition: border-color 0.3s ease;
   }
 `;
 
@@ -66,6 +109,7 @@ const SpeakingIndicator = styled.div<{ isSpeaking: boolean }>`
 interface Props {
   participants: Participant[];
   localParticipant: Participant | null;
+  onUpdateConnections: (connectedParticipants: string[]) => void;
 }
 
 interface Position {
@@ -73,12 +117,137 @@ interface Position {
   y: number;
 }
 
-const BubbleCanvas: React.FC<Props> = ({ participants, localParticipant }) => {
+interface NearestBubble {
+  position: Position;
+  distance: number;
+}
+
+const BubbleCanvas: React.FC<Props> = ({ participants, localParticipant, onUpdateConnections }) => {
   const [positions, setPositions] = useState<{ [key: string]: Position }>({});
   const [dragging, setDragging] = useState<string | null>(null);
+  const [connectedParticipants, setConnectedParticipants] = useState<string[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRefs = useRef<{ [key: string]: HTMLVideoElement | null }>({});
   const dragOffset = useRef<Position>({ x: 0, y: 0 });
+  const animationFrame = useRef<number>();
+
+  // Calculate the ideal snap position relative to another bubble
+  const calculateIdealPosition = (targetPos: Position, anchorPos: Position): Position => {
+    const dx = targetPos.x - anchorPos.x;
+    const dy = targetPos.y - anchorPos.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    if (distance < 0.1) return { x: anchorPos.x + MIN_DISTANCE, y: anchorPos.y };
+    
+    const angle = Math.atan2(dy, dx);
+    return {
+      x: anchorPos.x + Math.cos(angle) * MIN_DISTANCE,
+      y: anchorPos.y + Math.sin(angle) * MIN_DISTANCE
+    };
+  };
+
+  const calculateSnapPosition = (currentPos: Position, bubbleId: string, isFinalSnap: boolean = false): Position => {
+    let snapX = currentPos.x;
+    let snapY = currentPos.y;
+    let totalForce = { x: 0, y: 0 };
+    let nearestBubble: NearestBubble | null = null;
+
+    // Get all other bubble positions
+    Object.entries(positions).forEach(([id, pos]: [string, Position]) => {
+      if (id === bubbleId) return;
+
+      const dx = pos.x - currentPos.x;
+      const dy = pos.y - currentPos.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      // Track nearest bubble for final snapping
+      if (!nearestBubble || distance < nearestBubble.distance) {
+        nearestBubble = { 
+          position: { x: pos.x, y: pos.y },
+          distance 
+        };
+      }
+
+      // Strong repulsion to prevent overlap
+      if (distance < MIN_DISTANCE) {
+        const repulsionForce = Math.pow((MIN_DISTANCE - distance) / MIN_DISTANCE, 2) * 3.5; // Increased repulsion
+        totalForce.x -= dx * repulsionForce;
+        totalForce.y -= dy * repulsionForce;
+      }
+      // Smooth attraction within snap threshold
+      else if (distance < SNAP_THRESHOLD) {
+        const attractionForce = Math.pow((SNAP_THRESHOLD - distance) / SNAP_THRESHOLD, 2) * SNAP_STRENGTH;
+        totalForce.x += dx * attractionForce;
+        totalForce.y += dy * attractionForce;
+      }
+    });
+
+    // Handle final snap when releasing bubble
+    if (isFinalSnap && nearestBubble && nearestBubble.distance < SNAP_THRESHOLD) {
+      const idealPos = calculateIdealPosition(currentPos, nearestBubble.position);
+      return idealPos;
+    }
+
+    // Apply forces with smooth transition
+    const forceMagnitude = Math.sqrt(totalForce.x * totalForce.x + totalForce.y * totalForce.y);
+    if (forceMagnitude > 0) {
+      const normalizedForce = {
+        x: totalForce.x / forceMagnitude,
+        y: totalForce.y / forceMagnitude
+      };
+      
+      // Smooth force scaling with increased base strength
+      const forceScale = Math.min(forceMagnitude, 15) / 15;
+      snapX += normalizedForce.x * forceScale * 30; // Increased force
+      snapY += normalizedForce.y * forceScale * 30;
+    }
+
+    // Constrain to container bounds
+    if (containerRef.current) {
+      const bounds = containerRef.current.getBoundingClientRect();
+      snapX = Math.max(0, Math.min(snapX, bounds.width - BUBBLE_DIAMETER));
+      snapY = Math.max(0, Math.min(snapY, bounds.height - BUBBLE_DIAMETER));
+    }
+
+    return { x: snapX, y: snapY };
+  };
+
+  // Animate bubble movement
+  const animateBubblePosition = (bubbleId: string, targetPos: Position) => {
+    const currentPos = positions[bubbleId];
+    if (!currentPos) return;
+
+    const dx = targetPos.x - currentPos.x;
+    const dy = targetPos.y - currentPos.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (distance < 0.1) {
+      setPositions(prev => ({
+        ...prev,
+        [bubbleId]: targetPos
+      }));
+      return;
+    }
+
+    const newPos = {
+      x: currentPos.x + dx * 0.2,
+      y: currentPos.y + dy * 0.2
+    };
+
+    setPositions(prev => ({
+      ...prev,
+      [bubbleId]: newPos
+    }));
+
+    // Emit position update
+    if (bubbleId === localParticipant?.id) {
+      socketService.updatePosition(newPos);
+    }
+
+    animationFrame.current = requestAnimationFrame(() => 
+      animateBubblePosition(bubbleId, targetPos)
+    );
+  };
 
   // Initialize random positions for new participants
   useEffect(() => {
@@ -90,16 +259,44 @@ const BubbleCanvas: React.FC<Props> = ({ participants, localParticipant }) => {
         const containerWidth = containerRef.current?.clientWidth || window.innerWidth;
         const containerHeight = containerRef.current?.clientHeight || window.innerHeight;
         
+        const newPos = {
+          x: Math.random() * (containerWidth - BUBBLE_DIAMETER),
+          y: Math.random() * (containerHeight - BUBBLE_DIAMETER)
+        };
+
         setPositions(prev => ({
           ...prev,
-          [participant.id]: {
-            x: Math.random() * (containerWidth - 150),
-            y: Math.random() * (containerHeight - 150)
-          }
+          [participant.id]: calculateSnapPosition(newPos, participant.id)
         }));
       }
     });
   }, [participants, localParticipant]);
+
+  // Update connections when positions change
+  useEffect(() => {
+    if (!localParticipant) return;
+
+    const localPos = positions[localParticipant.id];
+    if (!localPos) return;
+
+    const connected: string[] = [];
+    participants.forEach(participant => {
+      const participantPos = positions[participant.id];
+      if (!participantPos) return;
+
+      const distance = Math.sqrt(
+        Math.pow(localPos.x - participantPos.x, 2) +
+        Math.pow(localPos.y - participantPos.y, 2)
+      );
+
+      if (distance <= SNAP_THRESHOLD) {
+        connected.push(participant.id);
+      }
+    });
+
+    setConnectedParticipants(connected);
+    onUpdateConnections(connected);
+  }, [positions, participants, localParticipant]);
 
   // Set up video streams
   useEffect(() => {
@@ -138,33 +335,86 @@ const BubbleCanvas: React.FC<Props> = ({ participants, localParticipant }) => {
     };
     
     setDragging(participantId);
+
+    // Cancel any ongoing animation
+    if (animationFrame.current) {
+      cancelAnimationFrame(animationFrame.current);
+    }
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!dragging || !containerRef.current) return;
 
     const containerRect = containerRef.current.getBoundingClientRect();
-    const newX = e.clientX - containerRect.left - dragOffset.current.x;
-    const newY = e.clientY - containerRect.top - dragOffset.current.y;
+    const rawX = e.clientX - containerRect.left - dragOffset.current.x;
+    const rawY = e.clientY - containerRect.top - dragOffset.current.y;
 
-    // Constrain to container bounds
-    const constrainedX = Math.max(0, Math.min(newX, containerRect.width - 150));
-    const constrainedY = Math.max(0, Math.min(newY, containerRect.height - 150));
-
-    const newPosition = { x: constrainedX, y: constrainedY };
+    // Calculate snapped position
+    const snappedPos = calculateSnapPosition({ x: rawX, y: rawY }, dragging);
     
     setPositions(prev => ({
       ...prev,
-      [dragging]: newPosition
+      [dragging]: snappedPos
     }));
 
     // Emit position update
-    socketService.updatePosition(newPosition);
+    socketService.updatePosition(snappedPos);
   };
 
   const handleMouseUp = () => {
+    if (!dragging) return;
+
+    const currentPos = positions[dragging];
+    if (currentPos) {
+      // Calculate final snap position
+      const finalPos = calculateSnapPosition(currentPos, dragging, true);
+      
+      // Animate to the final position with increased speed
+      const animate = () => {
+        const current = positions[dragging];
+        if (!current) return;
+
+        const dx = finalPos.x - current.x;
+        const dy = finalPos.y - current.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance < 0.5) {
+          setPositions(prev => ({
+            ...prev,
+            [dragging]: finalPos
+          }));
+          socketService.updatePosition(finalPos);
+          return;
+        }
+
+        const newPos = {
+          x: current.x + dx * 0.3, // Increased speed for final snap
+          y: current.y + dy * 0.3
+        };
+
+        setPositions(prev => ({
+          ...prev,
+          [dragging]: newPos
+        }));
+        socketService.updatePosition(newPos);
+
+        animationFrame.current = requestAnimationFrame(animate);
+      };
+
+      animate();
+    }
+
     setDragging(null);
   };
+
+  // Cleanup animation frame on unmount
+  useEffect(() => {
+    return () => {
+      if (animationFrame.current) {
+        cancelAnimationFrame(animationFrame.current);
+      }
+    };
+  }, []);
 
   return (
     <CanvasContainer
@@ -173,24 +423,48 @@ const BubbleCanvas: React.FC<Props> = ({ participants, localParticipant }) => {
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
     >
-      {[...participants, ...(localParticipant ? [localParticipant] : [])].map(participant => (
-        <Bubble
-          key={participant.id}
-          x={positions[participant.id]?.x || 0}
-          y={positions[participant.id]?.y || 0}
-          isDragging={dragging === participant.id}
-          onMouseDown={(e) => handleMouseDown(e, participant.id)}
-        >
-          <VideoPreview
-            ref={el => videoRefs.current[participant.id] = el}
-            autoPlay
-            playsInline
-            muted={participant.id === localParticipant?.id}
+      {/* Render connection lines */}
+      {connectedParticipants.map(participantId => {
+        const localPos = positions[localParticipant?.id || ''];
+        const participantPos = positions[participantId];
+        
+        if (!localPos || !participantPos) return null;
+
+        return (
+          <ConnectionLine
+            key={`connection-${participantId}`}
+            x1={localPos.x + BUBBLE_DIAMETER/2}
+            y1={localPos.y + BUBBLE_DIAMETER/2}
+            x2={participantPos.x + BUBBLE_DIAMETER/2}
+            y2={participantPos.y + BUBBLE_DIAMETER/2}
           />
-          <ParticipantName>{participant.name}</ParticipantName>
-          <SpeakingIndicator isSpeaking={participant.isSpeaking} />
-        </Bubble>
-      ))}
+        );
+      })}
+
+      {/* Render bubbles */}
+      {[...participants, ...(localParticipant ? [localParticipant] : [])].map(participant => {
+        const isConnected = connectedParticipants.includes(participant.id) || participant.id === localParticipant?.id;
+        
+        return (
+          <Bubble
+            key={participant.id}
+            x={positions[participant.id]?.x || 0}
+            y={positions[participant.id]?.y || 0}
+            isDragging={dragging === participant.id}
+            isConnected={isConnected}
+            onMouseDown={(e) => handleMouseDown(e, participant.id)}
+          >
+            <VideoPreview
+              ref={el => videoRefs.current[participant.id] = el}
+              autoPlay
+              playsInline
+              muted={participant.id === localParticipant?.id || !isConnected}
+            />
+            <ParticipantName>{participant.name}</ParticipantName>
+            <SpeakingIndicator isSpeaking={participant.isSpeaking && isConnected} />
+          </Bubble>
+        );
+      })}
     </CanvasContainer>
   );
 };

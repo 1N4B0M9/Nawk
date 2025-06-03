@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useVoiceflow } from './hooks/useVoiceflow';
 import BubbleCanvas from './components/BubbleCanvas';
 import styled from 'styled-components';
+import webRTCService from './services/webRTCService';
 
 const AppContainer = styled.div`
   width: 100vw;
@@ -70,6 +71,11 @@ const App: React.FC = () => {
     }
   };
 
+  const handleConnectionsUpdate = useCallback((connectedParticipants: string[]) => {
+    // Update WebRTC connections based on proximity
+    webRTCService.updateConnections(connectedParticipants);
+  }, []);
+
   return (
     <AppContainer>
       {!isConnected && (
@@ -94,6 +100,7 @@ const App: React.FC = () => {
         <BubbleCanvas
           participants={participants}
           localParticipant={localParticipant}
+          onUpdateConnections={handleConnectionsUpdate}
         />
       )}
     </AppContainer>
