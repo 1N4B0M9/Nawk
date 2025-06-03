@@ -112,6 +112,26 @@ class SocketService {
     this.socket.on('signal', callback);
   }
 
+  updatePosition(position: { x: number; y: number }): void {
+    if (!this.socket || !this.roomId || !this.userId) {
+      throw new Error('Socket not connected or room not joined');
+    }
+    
+    this.socket.emit('update-position', {
+      roomId: this.roomId,
+      userId: this.userId,
+      position
+    });
+  }
+
+  onPositionUpdate(callback: (data: { userId: string; position: { x: number; y: number } }) => void): void {
+    if (!this.socket) {
+      throw new Error('Socket not connected');
+    }
+    
+    this.socket.on('position-update', callback);
+  }
+
   removeAllListeners(): void {
     if (!this.socket) {
       return;

@@ -12,8 +12,31 @@ const io = new Server(server, {
   }
 });
 
-// Store active rooms and their participants
+// Store rooms and their participants
 const rooms = new Map();
+
+// Helper function to create a new participant
+const createParticipant = (id, name, socketId) => ({
+  id,
+  name,
+  socketId,
+  position: { x: 0, y: 0 }
+});
+
+// Helper function to handle user leaving
+const handleUserLeaving = (socket, roomId, userId) => {
+  const room = rooms.get(roomId);
+  if (!room) return;
+
+  room.delete(userId);
+  
+  if (room.size === 0) {
+    rooms.delete(roomId);
+  } else {
+    // Notify others that user has left
+    socket.to(roomId).emit('user-left', { userId });
+  }
+};
 
 io.on('connection', (socket) => {
   console.log(`User connected: ${socket.id}`);
@@ -34,39 +57,32 @@ io.on('connection', (socket) => {
     currentRoom = roomId;
     currentUserId = userId;
     
-    // Join the room
-    socket.join(roomId);
-    
-    // Initialize room if it doesn't exist
+    // Create room if it doesn't exist
     if (!rooms.has(roomId)) {
       rooms.set(roomId, new Map());
     }
     
     const room = rooms.get(roomId);
     
-    // Add user to room
-    room.set(userId, { 
-      id: userId, 
-      name: userName, 
-      socketId: socket.id 
+    // Add participant to room
+    room.set(userId, createParticipant(userId, userName, socket.id));
+    
+    // Join socket room
+    socket.join(roomId);
+    
+    // Send current participants to new user
+    socket.emit('room-participants', Array.from(room.values()).map(p => ({
+      userId: p.id,
+      userName: p.name,
+      position: p.position
+    })));
+    
+    // Notify others about new participant
+    socket.to(roomId).emit('user-joined', {
+      userId,
+      userName,
+      position: { x: 0, y: 0 }
     });
-    
-    // Get current participants (excluding the new user)
-    const existingParticipants = Array.from(room.values())
-      .filter(p => p.id !== userId)
-      .map(p => ({
-        userId: p.id,
-        userName: p.name
-      }));
-    
-    // Send existing participants to the new user
-    if (existingParticipants.length > 0) {
-      console.log(`Sending existing participants to ${userName}:`, existingParticipants);
-      socket.emit('room-participants', existingParticipants);
-    }
-    
-    // Notify others about the new user
-    socket.to(roomId).emit('user-joined', { userId, userName });
     
     // Log room state
     console.log(`Room ${roomId} current state:`, {
@@ -115,6 +131,23 @@ io.on('connection', (socket) => {
     });
   });
 
+  socket.on('update-position', ({ roomId, userId, position }) => {
+    const room = rooms.get(roomId);
+    if (!room) return;
+
+    const participant = room.get(userId);
+    if (!participant) return;
+
+    // Update participant's position
+    participant.position = position;
+
+    // Broadcast position update to all other participants in the room
+    socket.to(roomId).emit('position-update', {
+      userId,
+      position
+    });
+  });
+
   // Disconnect
   socket.on('disconnect', () => {
     console.log(`User disconnected: ${socket.id}`);
@@ -123,46 +156,6 @@ io.on('connection', (socket) => {
       handleUserLeaving(socket, currentRoom, currentUserId);
     }
   });
-  
-  // Helper function to handle a user leaving
-  function handleUserLeaving(socket, roomId, userId) {
-    console.log(`User ${userId} leaving room ${roomId}`);
-    
-    // Get room
-    const room = rooms.get(roomId);
-    if (!room) return;
-    
-    // Remove user from room
-    room.delete(userId);
-    
-    // Notify others
-    socket.to(roomId).emit('user-left', { userId });
-    
-    // Leave the socket room
-    socket.leave(roomId);
-    
-    // Remove room if empty
-    if (room.size === 0) {
-      rooms.delete(roomId);
-    }
-    
-    // Clear current room and user info
-    if (currentRoom === roomId) {
-      currentRoom = null;
-      currentUserId = null;
-    }
-    
-    // Log room state after leaving
-    if (room.size > 0) {
-      console.log(`Room ${roomId} state after user left:`, {
-        participants: Array.from(room.values()).map(p => ({
-          userId: p.id,
-          userName: p.name,
-          socketId: p.socketId
-        }))
-      });
-    }
-  }
 });
 
 // Start server
