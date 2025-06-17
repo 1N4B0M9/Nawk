@@ -359,14 +359,11 @@ class WebRTCService {
     this.connectedParticipants.forEach(participantId => {
       if (!newConnections.has(participantId)) {
         // Participant is no longer in range, mute their audio
-        const connection = this.connections.get(participantId);
-        if (connection) {
-          const participant = this.participants.get(participantId);
-          if (participant?.stream) {
-            participant.stream.getAudioTracks().forEach(track => {
-              track.enabled = false;
-            });
-          }
+        const participant = this.participants.get(participantId);
+        if (participant?.stream) {
+          participant.stream.getAudioTracks().forEach(track => {
+            track.enabled = false;
+          });
         }
       }
     });
@@ -375,14 +372,11 @@ class WebRTCService {
     newConnections.forEach(participantId => {
       if (!this.connectedParticipants.has(participantId)) {
         // New participant in range, unmute their audio
-        const connection = this.connections.get(participantId);
-        if (connection) {
-          const participant = this.participants.get(participantId);
-          if (participant?.stream) {
-            participant.stream.getAudioTracks().forEach(track => {
-              track.enabled = true;
-            });
-          }
+        const participant = this.participants.get(participantId);
+        if (participant?.stream) {
+          participant.stream.getAudioTracks().forEach(track => {
+            track.enabled = true;
+          });
         }
       }
     });
@@ -390,7 +384,7 @@ class WebRTCService {
     // Update the set of connected participants
     this.connectedParticipants = newConnections;
 
-    // Update participant states
+    // Update participant states - enable audio for all connected participants
     this.participants.forEach((participant, id) => {
       if (participant.stream) {
         const isConnected = id === this.userId || newConnections.has(id);

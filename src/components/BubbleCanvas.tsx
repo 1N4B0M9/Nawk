@@ -122,6 +122,46 @@ interface NearestBubble {
   distance: number;
 }
 
+const findChainedConnections = (
+  startId: string,
+  positions: { [key: string]: Position },
+  participants: string[],
+  threshold: number
+): Set<string> => {
+  const connected = new Set<string>();
+  const toProcess = new Set<string>([startId]);
+  
+  while (toProcess.size > 0) {
+    const currentId = Array.from(toProcess)[0];
+    toProcess.delete(currentId);
+    
+    if (connected.has(currentId)) continue;
+    connected.add(currentId);
+    
+    const currentPos = positions[currentId];
+    if (!currentPos) continue;
+    
+    // Find all participants within threshold of current participant
+    participants.forEach(participantId => {
+      if (participantId === currentId) return;
+      
+      const participantPos = positions[participantId];
+      if (!participantPos) return;
+      
+      const distance = Math.sqrt(
+        Math.pow(currentPos.x - participantPos.x, 2) +
+        Math.pow(currentPos.y - participantPos.y, 2)
+      );
+      
+      if (distance <= threshold && !connected.has(participantId)) {
+        toProcess.add(participantId);
+      }
+    });
+  }
+  
+  return connected;
+};
+
 const BubbleCanvas: React.FC<Props> = ({ participants, localParticipant, onUpdateConnections }) => {
   const [positions, setPositions] = useState<{ [key: string]: Position }>({});
   const [dragging, setDragging] = useState<string | null>(null);
@@ -366,23 +406,22 @@ const BubbleCanvas: React.FC<Props> = ({ participants, localParticipant, onUpdat
     const localPos = positions[localParticipant.id];
     if (!localPos) return;
 
-    const connected: string[] = [];
-    participants.forEach(participant => {
-      const participantPos = positions[participant.id];
-      if (!participantPos) return;
-
-      const distance = Math.sqrt(
-        Math.pow(localPos.x - participantPos.x, 2) +
-        Math.pow(localPos.y - participantPos.y, 2)
-      );
-
-      if (distance <= SNAP_THRESHOLD) {
-        connected.push(participant.id);
-      }
-    });
-
-    setConnectedParticipants(connected);
-    onUpdateConnections(connected);
+    // Get all participant IDs
+    const allParticipantIds = participants.map(p => p.id);
+    
+    // Find all chained connections starting from local participant
+    const connected = findChainedConnections(
+      localParticipant.id,
+      positions,
+      allParticipantIds,
+      SNAP_THRESHOLD
+    );
+    
+    // Convert Set to array and remove local participant from the list
+    const connectedArray = Array.from(connected).filter(id => id !== localParticipant.id);
+    
+    setConnectedParticipants(connectedArray);
+    onUpdateConnections(connectedArray);
   }, [positions, participants, localParticipant]);
 
   // Set up video streams
