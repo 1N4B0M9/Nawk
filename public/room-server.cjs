@@ -131,6 +131,7 @@ io.on('connection', (socket) => {
     });
   });
 
+  // Handle position updates
   socket.on('update-position', ({ roomId, userId, position }) => {
     const room = rooms.get(roomId);
     if (!room) return;
@@ -146,6 +147,23 @@ io.on('connection', (socket) => {
       userId,
       position
     });
+  });
+
+  // Handle initial positions request
+  socket.on('request-initial-positions', ({ roomId }) => {
+    const room = rooms.get(roomId);
+    if (!room) return;
+
+    // Collect all current positions in the room
+    const positions = {};
+    room.forEach((participant, userId) => {
+      if (participant.position) {
+        positions[userId] = participant.position;
+      }
+    });
+
+    // Send all positions to the requesting socket
+    socket.emit('initial-positions', positions);
   });
 
   // Disconnect

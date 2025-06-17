@@ -212,6 +212,47 @@ const BubbleCanvas: React.FC<Props> = ({ participants, localParticipant, onUpdat
     return { x: snapX, y: snapY };
   };
 
+  // Calculate grid-based position for index
+  const calculateGridPosition = (index: number, totalParticipants: number): Position => {
+    const containerWidth = containerRef.current?.clientWidth || window.innerWidth;
+    const containerHeight = containerRef.current?.clientHeight || window.innerHeight;
+    const centerX = containerWidth / 2;
+    const centerY = containerHeight / 2;
+
+    if (index === 0) {
+      return {
+        x: centerX - BUBBLE_DIAMETER / 2,
+        y: centerY - BUBBLE_DIAMETER / 2
+      };
+    }
+
+    // Calculate the number of rings needed based on total participants
+    let currentRing = 1;
+    let positionsInPreviousRings = 1;
+    let positionsInCurrentRing = 6; // First ring holds 6 positions
+    
+    // Find which ring this participant belongs to
+    while (positionsInPreviousRings + positionsInCurrentRing <= index) {
+      positionsInPreviousRings += positionsInCurrentRing;
+      currentRing++;
+      positionsInCurrentRing = currentRing * 6; // Each ring can hold 6 more than the previous
+    }
+
+    // Calculate position within the current ring
+    const positionInRing = index - positionsInPreviousRings;
+    const totalPositionsInRing = currentRing * 6;
+    const angleStep = (2 * Math.PI) / totalPositionsInRing;
+    const angle = angleStep * positionInRing;
+
+    // Calculate radius for current ring (increases linearly with ring number)
+    const radius = currentRing * MIN_DISTANCE;
+
+    return {
+      x: centerX + Math.cos(angle) * radius - BUBBLE_DIAMETER / 2,
+      y: centerY + Math.sin(angle) * radius - BUBBLE_DIAMETER / 2
+    };
+  };
+
   // Animate bubble movement
   const animateBubblePosition = (bubbleId: string, targetPos: Position) => {
     const currentPos = positions[bubbleId];
@@ -249,28 +290,74 @@ const BubbleCanvas: React.FC<Props> = ({ participants, localParticipant, onUpdat
     );
   };
 
-  // Initialize random positions for new participants
+  // Listen for position updates from other participants
+  useEffect(() => {
+    socketService.onPositionUpdate(({ userId, position }) => {
+      // Immediately update position without animation for other participants
+      setPositions(prev => ({
+        ...prev,
+        [userId]: position
+      }));
+    });
+
+    // Request initial positions from all participants when joining
+    if (localParticipant) {
+      socketService.requestInitialPositions();
+    }
+
+    // Listen for initial positions response
+    socketService.onInitialPositions((positions) => {
+      setPositions(prev => ({
+        ...prev,
+        ...positions
+      }));
+    });
+
+    return () => {
+      socketService.offPositionUpdate();
+      socketService.offInitialPositions();
+    };
+  }, [localParticipant]);
+
+  // Initialize positions for new participants
   useEffect(() => {
     const allParticipants = [...participants];
     if (localParticipant) allParticipants.push(localParticipant);
 
-    allParticipants.forEach(participant => {
+    // Calculate positions for new participants
+    allParticipants.forEach((participant, index) => {
       if (!positions[participant.id]) {
+        const newPos = calculateGridPosition(index, allParticipants.length);
+
+        // Ensure the position is within bounds
         const containerWidth = containerRef.current?.clientWidth || window.innerWidth;
         const containerHeight = containerRef.current?.clientHeight || window.innerHeight;
         
-        const newPos = {
-          x: Math.random() * (containerWidth - BUBBLE_DIAMETER),
-          y: Math.random() * (containerHeight - BUBBLE_DIAMETER)
-        };
+        newPos.x = Math.max(0, Math.min(newPos.x, containerWidth - BUBBLE_DIAMETER));
+        newPos.y = Math.max(0, Math.min(newPos.y, containerHeight - BUBBLE_DIAMETER));
 
+        // Apply final position with snap calculation
+        const finalPos = calculateSnapPosition(newPos, participant.id);
+        
         setPositions(prev => ({
           ...prev,
-          [participant.id]: calculateSnapPosition(newPos, participant.id)
+          [participant.id]: finalPos
         }));
+
+        // Broadcast position update to all participants
+        if (participant.id === localParticipant?.id) {
+          socketService.updatePosition(finalPos);
+        }
       }
     });
   }, [participants, localParticipant]);
+
+  // Broadcast position updates when positions change
+  useEffect(() => {
+    if (localParticipant && positions[localParticipant.id]) {
+      socketService.updatePosition(positions[localParticipant.id]);
+    }
+  }, [positions, localParticipant]);
 
   // Update connections when positions change
   useEffect(() => {
@@ -312,16 +399,6 @@ const BubbleCanvas: React.FC<Props> = ({ participants, localParticipant, onUpdat
       }
     });
   }, [participants, localParticipant]);
-
-  // Listen for position updates from other participants
-  useEffect(() => {
-    socketService.onPositionUpdate(({ userId, position }) => {
-      setPositions(prev => ({
-        ...prev,
-        [userId]: position
-      }));
-    });
-  }, []);
 
   const handleMouseDown = (e: React.MouseEvent, participantId: string) => {
     if (participantId !== localParticipant?.id) return;
