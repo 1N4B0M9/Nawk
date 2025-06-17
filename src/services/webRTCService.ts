@@ -39,6 +39,7 @@ class WebRTCService {
   private userName: string = '';
   private roomId: string = '';
   private isConnected: boolean = false;
+  private connectedParticipants: Set<string> = new Set();
 
   constructor() {
     this.peer = null;
@@ -172,17 +173,17 @@ class WebRTCService {
     this.connections.set(peerId, call);
 
     call.on('stream', (remoteStream: MediaStream) => {
-      console.log('Received stream from:', peerId, {
-        audioTracks: remoteStream.getAudioTracks().length,
-        videoTracks: remoteStream.getVideoTracks().length
-      });
+      console.log('Received stream from:', peerId);
       
       const participant = this.participants.get(peerId);
       if (participant) {
         // Create a new MediaStream to avoid reference issues
         const newStream = new MediaStream();
         remoteStream.getTracks().forEach(track => {
-          track.enabled = true;
+          // Start with audio disabled until proximity is established
+          if (track.kind === 'audio') {
+            track.enabled = false;
+          }
           newStream.addTrack(track);
         });
 
@@ -190,12 +191,6 @@ class WebRTCService {
           ...participant,
           stream: newStream,
           isSpeaking: false
-        });
-
-        console.log('Updated participant stream:', {
-          id: peerId,
-          audioTracks: newStream.getAudioTracks().map(t => ({ enabled: t.enabled })),
-          videoTracks: newStream.getVideoTracks().map(t => ({ enabled: t.enabled }))
         });
       }
     });
@@ -354,6 +349,50 @@ class WebRTCService {
     socketService.disconnect();
     
     this.participants.clear();
+  }
+
+  updateConnections(connectedParticipants: string[]): void {
+    // Convert array to Set for efficient lookups
+    const newConnections = new Set(connectedParticipants);
+    
+    // Handle disconnections
+    this.connectedParticipants.forEach(participantId => {
+      if (!newConnections.has(participantId)) {
+        // Participant is no longer in range, mute their audio
+        const participant = this.participants.get(participantId);
+        if (participant?.stream) {
+          participant.stream.getAudioTracks().forEach(track => {
+            track.enabled = false;
+          });
+        }
+      }
+    });
+
+    // Handle new connections
+    newConnections.forEach(participantId => {
+      if (!this.connectedParticipants.has(participantId)) {
+        // New participant in range, unmute their audio
+        const participant = this.participants.get(participantId);
+        if (participant?.stream) {
+          participant.stream.getAudioTracks().forEach(track => {
+            track.enabled = true;
+          });
+        }
+      }
+    });
+
+    // Update the set of connected participants
+    this.connectedParticipants = newConnections;
+
+    // Update participant states - enable audio for all connected participants
+    this.participants.forEach((participant, id) => {
+      if (participant.stream) {
+        const isConnected = id === this.userId || newConnections.has(id);
+        participant.stream.getAudioTracks().forEach(track => {
+          track.enabled = isConnected;
+        });
+      }
+    });
   }
 }
 

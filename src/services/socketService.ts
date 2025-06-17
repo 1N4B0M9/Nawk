@@ -112,6 +112,60 @@ class SocketService {
     this.socket.on('signal', callback);
   }
 
+  updatePosition(position: { x: number; y: number }): void {
+    if (!this.socket || !this.roomId || !this.userId) {
+      throw new Error('Socket not connected or room not joined');
+    }
+    
+    this.socket.emit('update-position', {
+      roomId: this.roomId,
+      userId: this.userId,
+      position
+    });
+  }
+
+  requestInitialPositions(): void {
+    if (!this.socket || !this.roomId) {
+      throw new Error('Socket not connected or room not joined');
+    }
+    
+    this.socket.emit('request-initial-positions', {
+      roomId: this.roomId
+    });
+  }
+
+  onPositionUpdate(callback: (data: { userId: string; position: { x: number; y: number } }) => void): void {
+    if (!this.socket) {
+      throw new Error('Socket not connected');
+    }
+    
+    this.socket.on('position-update', callback);
+  }
+
+  onInitialPositions(callback: (positions: { [key: string]: { x: number; y: number } }) => void): void {
+    if (!this.socket) {
+      throw new Error('Socket not connected');
+    }
+    
+    this.socket.on('initial-positions', callback);
+  }
+
+  offPositionUpdate(): void {
+    if (!this.socket) {
+      throw new Error('Socket not connected');
+    }
+    
+    this.socket.off('position-update');
+  }
+
+  offInitialPositions(): void {
+    if (!this.socket) {
+      throw new Error('Socket not connected');
+    }
+    
+    this.socket.off('initial-positions');
+  }
+
   removeAllListeners(): void {
     if (!this.socket) {
       return;
