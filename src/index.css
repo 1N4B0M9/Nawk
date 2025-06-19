@@ -9,6 +9,7 @@
     --color-bg: #f8fafc;
     --color-bg-secondary: #f1f5f9;
     --color-text: #1a1a1a;
+    --color-text-secondary: #6b7280;
     --color-accent: #8b5cf6; /* purple */
     --color-accent-hover: #7c3aed;
     --color-border: #e5e7eb;
@@ -17,6 +18,7 @@
     --color-bg: #121212;
     --color-bg-secondary: #2a2a2a;
     --color-text: #fff;
+    --color-text-secondary: #9ca3af;
     --color-accent: #8b5cf6;
     --color-accent-hover: #7c3aed;
     --color-border: #232323;

@@ -1,6 +1,5 @@
 import React, { useEffect, useRef } from 'react';
 import webRTCService from '../services/webRTCService';
-import videoService from '../services/videoService';
 import { Participant } from '../types';
 import styled from 'styled-components';
 
