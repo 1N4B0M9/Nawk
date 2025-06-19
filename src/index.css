@@ -5,10 +5,24 @@
 @layer base {
   html {
     font-family: 'Inter', system-ui, sans-serif;
+    /* Theme variables */
+    --color-bg: #f8fafc;
+    --color-bg-secondary: #f1f5f9;
+    --color-text: #1a1a1a;
+    --color-accent: #8b5cf6; /* purple */
+    --color-accent-hover: #7c3aed;
+    --color-border: #e5e7eb;
   }
-  
+  html.dark {
+    --color-bg: #121212;
+    --color-bg-secondary: #2a2a2a;
+    --color-text: #fff;
+    --color-accent: #8b5cf6;
+    --color-accent-hover: #7c3aed;
+    --color-border: #232323;
+  }
   body {
-    @apply bg-background-dark text-white antialiased;
+    @apply bg-[var(--color-bg)] text-[var(--color-text)] antialiased;
   }
 }
 
@@ -37,4 +51,18 @@
     @apply opacity-100 animate-speaking;
     background: radial-gradient(circle, rgba(139, 92, 246, 0.3) 0%, rgba(139, 92, 246, 0) 70%);
   }
+}
+
+/* Utility for accent background */
+.bg-accent {
+  background-color: var(--color-accent);
+}
+.bg-accent-hover:hover {
+  background-color: var(--color-accent-hover);
+}
+.text-accent {
+  color: var(--color-accent);
+}
+.border-accent {
+  border-color: var(--color-accent);
 }

@@ -152,17 +152,15 @@ class SocketService {
 
   offPositionUpdate(): void {
     if (!this.socket) {
-      throw new Error('Socket not connected');
+      return;
     }
-    
     this.socket.off('position-update');
   }
 
   offInitialPositions(): void {
     if (!this.socket) {
-      throw new Error('Socket not connected');
+      return;
     }
-    
     this.socket.off('initial-positions');
   }
 

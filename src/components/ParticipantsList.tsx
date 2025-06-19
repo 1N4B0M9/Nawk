@@ -24,7 +24,7 @@ const ParticipantsList: React.FC<ParticipantsListProps> = ({
         {/* Local participant is always shown first and larger */}
         {localParticipant && (
           <div className="flex flex-col items-center">
-            <p className="text-xs text-primary-400 mb-2">You</p>
+            <p className="text-xs text-accent mb-2">You</p>
             <ParticipantAvatar 
               participant={localParticipant} 
               size="lg"
@@ -46,7 +46,7 @@ const ParticipantsList: React.FC<ParticipantsListProps> = ({
           ))}
         </div>
       ) : (
-        <div className="text-center py-8 text-gray-400">
+        <div className="text-center py-8 text-gray-400 dark:text-gray-500">
           <p>Waiting for others to join...</p>
           <p className="text-sm mt-2">Share the room link to invite others</p>
         </div>

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import styled from 'styled-components';
 import { Participant } from '../types';
 import socketService from '../services/socketService';
+import { PhoneOff } from 'lucide-react';
 
 const CONVERSATION_THRESHOLD = 200; // Distance threshold for conversations in pixels
 const BUBBLE_DIAMETER = 150; // Bubble size in pixels
@@ -13,7 +14,7 @@ const FINAL_SNAP_DISTANCE = MIN_DISTANCE * 1.1; // Distance for final snap posit
 const CanvasContainer = styled.div`
   width: 100vw;
   height: 100vh;
-  background: #1a1a1a;
+  background: var(--color-bg);
   position: relative;
   overflow: hidden;
 `;
@@ -44,7 +45,7 @@ const Bubble = styled.div<{ x: number; y: number; isDragging: boolean; isConnect
   width: 150px;
   height: 150px;
   border-radius: 50%;
-  background: #2a2a2a;
+  background: var(--color-bg-secondary);
   cursor: grab;
   transform: translate(${props => props.x}px, ${props => props.y}px);
   transition: ${props => props.isDragging ? 'none' : 'transform 0.3s ease'};
@@ -52,19 +53,19 @@ const Bubble = styled.div<{ x: number; y: number; isDragging: boolean; isConnect
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  border: 3px solid ${props => props.isConnected ? '#4CAF50' : '#666'};
-  box-shadow: 0 0 20px ${props => props.isConnected ? 'rgba(76, 175, 80, 0.3)' : 'transparent'};
+  border: 3px solid ${props => props.isConnected ? 'var(--color-accent)' : 'var(--color-border)'};
+  box-shadow: 0 0 20px ${props => props.isConnected ? 'var(--color-accent)' : 'transparent'};
   
   &:hover {
-    border-color: ${props => props.isConnected ? '#45a049' : '#888'};
+    border-color: ${props => props.isConnected ? 'var(--color-accent-hover)' : 'var(--color-border)'};
   }
 
   &::before {
     content: '';
     position: absolute;
-    width: ${CONVERSATION_THRESHOLD * 2}px;
-    height: ${CONVERSATION_THRESHOLD * 2}px;
-    border: 2px dashed ${props => props.isDragging ? 'rgba(76, 175, 80, 0.3)' : 'transparent'};
+    width: ${CONVERSATION_THRESHOLD}px;
+    height: ${CONVERSATION_THRESHOLD}px;
+    border: 2px dashed ${props => props.isDragging ? 'var(--color-accent)' : 'transparent'};
     border-radius: 50%;
     top: 50%;
     left: 50%;
@@ -79,7 +80,7 @@ const VideoPreview = styled.video`
   height: 120px;
   border-radius: 50%;
   object-fit: cover;
-  background: #3a3a3a;
+  background: var(--color-border);
 `;
 
 const ParticipantName = styled.div`
@@ -87,8 +88,8 @@ const ParticipantName = styled.div`
   bottom: -25px;
   left: 50%;
   transform: translateX(-50%);
-  color: white;
-  background: rgba(0, 0, 0, 0.5);
+  color: var(--color-text);
+  background: rgba(0, 0, 0, 0.2);
   padding: 4px 8px;
   border-radius: 12px;
   font-size: 0.9rem;
@@ -102,14 +103,39 @@ const SpeakingIndicator = styled.div<{ isSpeaking: boolean }>`
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: ${props => props.isSpeaking ? '#4CAF50' : '#666'};
+  background: ${props => props.isSpeaking ? 'var(--color-accent)' : 'var(--color-border)'};
   transition: background-color 0.2s ease;
+`;
+
+const HangupButton = styled.button`
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  z-index: 100;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 9999px;
+  padding: 0.75rem;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background: #dc2626;
+    transform: scale(1.05);
+  }
+  
+  &:active {
+    transform: scale(0.95);
+  }
 `;
 
 interface Props {
   participants: Participant[];
   localParticipant: Participant | null;
   onUpdateConnections: (connectedParticipants: string[]) => void;
+  onDisconnect: () => void;
 }
 
 interface Position {
@@ -162,7 +188,7 @@ const findChainedConnections = (
   return connected;
 };
 
-const BubbleCanvas: React.FC<Props> = ({ participants, localParticipant, onUpdateConnections }) => {
+const BubbleCanvas: React.FC<Props> = ({ participants, localParticipant, onUpdateConnections, onDisconnect }) => {
   const [positions, setPositions] = useState<{ [key: string]: Position }>({});
   const [dragging, setDragging] = useState<string | null>(null);
   const [connectedParticipants, setConnectedParticipants] = useState<string[]>([]);
@@ -201,11 +227,8 @@ const BubbleCanvas: React.FC<Props> = ({ participants, localParticipant, onUpdat
       const distance = Math.sqrt(dx * dx + dy * dy);
 
       // Track nearest bubble for final snapping
-      if (!nearestBubble || distance < nearestBubble.distance) {
-        nearestBubble = { 
-          position: { x: pos.x, y: pos.y },
-          distance 
-        };
+      if (nearestBubble === null || distance < (nearestBubble as NearestBubble).distance) {
+        nearestBubble = { position: { x: pos.x, y: pos.y }, distance };
       }
 
       // Strong repulsion to prevent overlap
@@ -223,8 +246,12 @@ const BubbleCanvas: React.FC<Props> = ({ participants, localParticipant, onUpdat
     });
 
     // Handle final snap when releasing bubble
-    if (isFinalSnap && nearestBubble && nearestBubble.distance < SNAP_THRESHOLD) {
-      const idealPos = calculateIdealPosition(currentPos, nearestBubble.position);
+    if (
+      isFinalSnap &&
+      nearestBubble !== null &&
+      (nearestBubble as NearestBubble).distance < SNAP_THRESHOLD
+    ) {
+      const idealPos = calculateIdealPosition(currentPos, (nearestBubble as NearestBubble).position);
       return idealPos;
     }
 
@@ -539,6 +566,10 @@ const BubbleCanvas: React.FC<Props> = ({ participants, localParticipant, onUpdat
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
     >
+      <HangupButton onClick={onDisconnect} title="Leave call">
+        <PhoneOff size={20} />
+      </HangupButton>
+      
       {/* Render connection lines */}
       {connectedParticipants.map(participantId => {
         const localPos = positions[localParticipant?.id || ''];
