@@ -9,7 +9,6 @@ const BUBBLE_DIAMETER = 150; // Bubble size in pixels
 const SNAP_THRESHOLD = CONVERSATION_THRESHOLD * 0.9; // Start snapping from further away
 const SNAP_STRENGTH = 0.4; // Increased snapping force
 const MIN_DISTANCE = BUBBLE_DIAMETER * 1.2; // Minimum distance between bubbles
-const FINAL_SNAP_DISTANCE = MIN_DISTANCE * 1.1; // Distance for final snap position
 
 const CanvasContainer = styled.div`
   width: 100vw;
@@ -280,7 +279,7 @@ const BubbleCanvas: React.FC<Props> = ({ participants, localParticipant, onUpdat
   };
 
   // Calculate grid-based position for index
-  const calculateGridPosition = (index: number, totalParticipants: number): Position => {
+  const calculateGridPosition = (index: number): Position => {
     const containerWidth = containerRef.current?.clientWidth || window.innerWidth;
     const containerHeight = containerRef.current?.clientHeight || window.innerHeight;
     const centerX = containerWidth / 2;
@@ -394,7 +393,7 @@ const BubbleCanvas: React.FC<Props> = ({ participants, localParticipant, onUpdat
     // Calculate positions for new participants
     allParticipants.forEach((participant, index) => {
       if (!positions[participant.id]) {
-        const newPos = calculateGridPosition(index, allParticipants.length);
+        const newPos = calculateGridPosition(index);
 
         // Ensure the position is within bounds
         const containerWidth = containerRef.current?.clientWidth || window.innerWidth;

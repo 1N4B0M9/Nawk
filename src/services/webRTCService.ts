@@ -5,29 +5,12 @@ import socketService from './socketService';
 import audioService from './audioService';
 import videoService from './videoService';
 
-declare module 'peerjs' {
-  export interface MediaConnection {
-    peer: string;
-    on(event: 'stream', cb: (stream: MediaStream) => void): void;
-    on(event: 'close', cb: () => void): void;
-    on(event: 'error', cb: (error: Error) => void): void;
-    answer(stream: MediaStream): void;
-    close(): void;
-  }
-
-  export class Peer {
-    constructor(id: string, options?: any);
-    on(event: 'open', cb: (id: string) => void): void;
-    on(event: 'call', cb: (call: MediaConnection) => void): void;
-    on(event: 'error', cb: (error: Error) => void): void;
-    call(peerId: string, stream: MediaStream): MediaConnection;
-    destroy(): void;
-  }
-}
-
 // Polyfill for process.nextTick
 if (typeof window !== 'undefined' && !window.process) {
-  (window as any).process = { env: {} };
+  interface WindowWithProcess extends Window {
+    process: { env: Record<string, string> };
+  }
+  (window as WindowWithProcess).process = { env: {} };
 }
 
 class WebRTCService {

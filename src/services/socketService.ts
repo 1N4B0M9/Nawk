@@ -1,5 +1,5 @@
 import { io, Socket } from 'socket.io-client';
-import { JoinRoomData, PeerSignalData, RoomData } from '../types';
+import { JoinRoomData, PeerSignalData } from '../types';
 
 // Get the current hostname and port from the window location
 const currentHost = window.location.hostname;
@@ -112,6 +112,22 @@ class SocketService {
     this.socket.on('signal', callback);
   }
 
+  onJoinSuccess(callback: (data: { roomId: string; participantCount: number; maxParticipants: number }) => void): void {
+    if (!this.socket) {
+      throw new Error('Socket not connected');
+    }
+    
+    this.socket.on('join-success', callback);
+  }
+
+  onJoinError(callback: (data: { error: string }) => void): void {
+    if (!this.socket) {
+      throw new Error('Socket not connected');
+    }
+    
+    this.socket.on('join-error', callback);
+  }
+
   updatePosition(position: { x: number; y: number }): void {
     if (!this.socket || !this.roomId || !this.userId) {
       throw new Error('Socket not connected or room not joined');
@@ -164,6 +180,20 @@ class SocketService {
     this.socket.off('initial-positions');
   }
 
+  offJoinSuccess(): void {
+    if (!this.socket) {
+      return;
+    }
+    this.socket.off('join-success');
+  }
+
+  offJoinError(): void {
+    if (!this.socket) {
+      return;
+    }
+    this.socket.off('join-error');
+  }
+
   removeAllListeners(): void {
     if (!this.socket) {
       return;
@@ -173,6 +203,8 @@ class SocketService {
     this.socket.removeAllListeners('user-joined');
     this.socket.removeAllListeners('user-left');
     this.socket.removeAllListeners('signal');
+    this.socket.removeAllListeners('join-success');
+    this.socket.removeAllListeners('join-error');
   }
 }
 

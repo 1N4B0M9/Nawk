@@ -4,6 +4,7 @@ export interface Participant {
   stream?: MediaStream;
   isSpeaking: boolean;
   audioLevel: number;
+  isMuted?: boolean;
   position?: {
     x: number;
     y: number;
@@ -28,7 +29,7 @@ export interface RoomData {
 export interface PeerSignalData {
   from: string;
   to: string;
-  signal: any;
+  signal: RTCSessionDescriptionInit | RTCIceCandidateInit;
 }
 
 export interface PositionData {
@@ -37,4 +38,10 @@ export interface PositionData {
     x: number;
     y: number;
   };
+}
+
+export interface AudioProcessingOptions {
+  noiseReduction: boolean;
+  gainControl: boolean;
+  echoCancellation: boolean;
 } 

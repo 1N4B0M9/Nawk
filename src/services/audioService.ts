@@ -1,5 +1,10 @@
 import { AudioProcessingOptions } from '../types';
 
+// Define the webkitAudioContext interface for Safari compatibility
+interface WindowWithWebkitAudioContext extends Window {
+  webkitAudioContext?: new () => AudioContext;
+}
+
 class AudioService {
   private audioContext: AudioContext | null = null;
   private sourceNode: MediaStreamAudioSourceNode | null = null;
@@ -20,7 +25,8 @@ class AudioService {
 
   async initialize(): Promise<void> {
     try {
-      this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const windowWithWebkit = window as WindowWithWebkitAudioContext;
+      this.audioContext = new (window.AudioContext || windowWithWebkit.webkitAudioContext!)();
       console.log('Audio context initialized');
     } catch (error) {
       console.error('Failed to initialize audio context:', error);

@@ -56,7 +56,7 @@ const ParticipantAvatar: React.FC<ParticipantAvatarProps> = ({
       const playAudio = async () => {
         try {
           await audioRef.current?.play();
-        } catch (err) {
+        } catch {
           console.warn('Failed to play audio, waiting for user interaction');
           const playOnClick = () => {
             audioRef.current?.play().catch(console.error);
@@ -77,7 +77,7 @@ const ParticipantAvatar: React.FC<ParticipantAvatarProps> = ({
       const playVideo = async () => {
         try {
           await videoRef.current?.play();
-        } catch (err) {
+        } catch {
           console.warn('Failed to play video, waiting for user interaction');
           const playOnClick = () => {
             videoRef.current?.play().catch(console.error);
@@ -90,13 +90,16 @@ const ParticipantAvatar: React.FC<ParticipantAvatarProps> = ({
     }
 
     return () => {
-      if (audioRef.current) {
-        audioRef.current.srcObject = null;
-        audioRef.current.pause();
+      const audio = audioRef.current;
+      const video = videoRef.current;
+      
+      if (audio) {
+        audio.srcObject = null;
+        audio.pause();
       }
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-        videoRef.current.pause();
+      if (video) {
+        video.srcObject = null;
+        video.pause();
       }
     };
   }, [participant.stream, isLocal, participant.name]);

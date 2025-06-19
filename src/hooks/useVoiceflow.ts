@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Participant } from '../types';
 import webRTCService from '../services/webRTCService';
+import socketService from '../services/socketService';
 
 export const useVoiceflow = (roomId: string = 'room-demo-01') => {
   const [isConnected, setIsConnected] = useState(false);
@@ -9,43 +10,8 @@ export const useVoiceflow = (roomId: string = 'room-demo-01') => {
   const [error, setError] = useState<string | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [localParticipant, setLocalParticipant] = useState<Participant | null>(null);
-
-  // Connect to a room
-  const connect = useCallback(async (userName: string) => {
-    if (isConnected || isConnecting) return;
-    
-    setIsConnecting(true);
-    setError(null);
-    
-    try {
-      const userId = uuidv4();
-      await webRTCService.initialize(userId, userName, roomId);
-      setIsConnected(true);
-      
-      // Start polling for participants
-      updateParticipantsState();
-    } catch (err) {
-      console.error('Failed to connect:', err);
-      setError(err instanceof Error ? err.message : 'Failed to connect');
-    } finally {
-      setIsConnecting(false);
-    }
-  }, [isConnected, isConnecting, roomId]);
-
-  // Disconnect from the room
-  const disconnect = useCallback(() => {
-    if (!isConnected) return;
-    
-    try {
-      webRTCService.cleanup();
-    } catch (err) {
-      console.error('Error during cleanup:', err);
-    } finally {
-      setIsConnected(false);
-      setParticipants([]);
-      setLocalParticipant(null);
-    }
-  }, [isConnected]);
+  const [participantCount, setParticipantCount] = useState<number>(0);
+  const [maxParticipants] = useState<number>(15);
 
   // Update participants state from service
   const updateParticipantsState = useCallback(() => {
@@ -62,6 +28,70 @@ export const useVoiceflow = (roomId: string = 'room-demo-01') => {
     }
   }, []);
 
+  // Connect to a room
+  const connect = useCallback(async (userName: string) => {
+    if (isConnected || isConnecting) return;
+    
+    setIsConnecting(true);
+    setError(null);
+    
+    try {
+      const userId = uuidv4();
+      
+      // Connect to socket server first
+      await socketService.connect();
+      
+      // Set up socket event listeners
+      socketService.onJoinSuccess((data) => {
+        console.log('Successfully joined room:', data);
+        setParticipantCount(data.participantCount);
+      });
+      
+      socketService.onJoinError((data) => {
+        console.error('Failed to join room:', data.error);
+        setError(data.error);
+        setIsConnecting(false);
+      });
+      
+      // Join the room
+      socketService.joinRoom({
+        roomId,
+        userId,
+        userName
+      });
+      
+      // Initialize WebRTC service
+      await webRTCService.initialize(userId, userName, roomId);
+      setIsConnected(true);
+      
+      // Start polling for participants
+      updateParticipantsState();
+    } catch (err) {
+      console.error('Failed to connect:', err);
+      setError(err instanceof Error ? err.message : 'Failed to connect');
+      setIsConnecting(false);
+    }
+  }, [isConnected, isConnecting, roomId, updateParticipantsState]);
+
+  // Disconnect from the room
+  const disconnect = useCallback(() => {
+    if (!isConnected) return;
+    
+    try {
+      socketService.leaveRoom();
+      socketService.disconnect();
+      webRTCService.cleanup();
+    } catch (err) {
+      console.error('Error during cleanup:', err);
+    } finally {
+      setIsConnected(false);
+      setParticipants([]);
+      setLocalParticipant(null);
+      setParticipantCount(0);
+      setError(null);
+    }
+  }, [isConnected]);
+
   // Set up polling interval to update participants state
   useEffect(() => {
     if (!isConnected) return;
@@ -77,10 +107,13 @@ export const useVoiceflow = (roomId: string = 'room-demo-01') => {
   useEffect(() => {
     return () => {
       if (isConnected) {
-        webRTCService.cleanup();
+        disconnect();
       }
+      // Clean up socket listeners
+      socketService.offJoinSuccess();
+      socketService.offJoinError();
     };
-  }, [isConnected]);
+  }, [isConnected, disconnect]);
 
   return {
     isConnected,
@@ -88,6 +121,8 @@ export const useVoiceflow = (roomId: string = 'room-demo-01') => {
     error,
     participants,
     localParticipant,
+    participantCount,
+    maxParticipants,
     connect,
     disconnect,
   };
