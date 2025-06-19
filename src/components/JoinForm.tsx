@@ -23,7 +23,7 @@ const JoinForm: React.FC<JoinFormProps> = ({ onJoin, isConnecting, error }) => {
         <div className="w-16 h-16 bg-accent rounded-full flex items-center justify-center mb-4">
           <Volume2 size={32} className="text-white" />
         </div>
-        <h1 className="text-3xl font-semibold text-[var(--color-text)]">Voiceflow</h1>
+        <h1 className="text-3xl font-semibold text-[var(--color-text)]">NawkNawk</h1>
         <p className="text-gray-500 dark:text-gray-300 mt-2 text-center">
           Audio-only meetings with natural conversation flow
         </p>

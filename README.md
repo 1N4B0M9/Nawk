@@ -1,6 +1,6 @@
-# Voiceflow - Audio-Only Meeting App
+# NawkNawk - Audio-Only Meeting App
 
-Voiceflow is a lightweight, browser-based WebRTC voice meeting app focused on reducing awkwardness in virtual calls. It provides an audio-only experience optimized for casual conversations with smart voice flow features.
+NawkNawk is a lightweight, browser-based WebRTC voice meeting app focused on reducing awkwardness in virtual calls. It provides an audio-only experience optimized for casual conversations with smart voice flow features.
 
 ## Features
 
@@ -23,8 +23,8 @@ Voiceflow is a lightweight, browser-based WebRTC voice meeting app focused on re
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/yourusername/voiceflow.git
-cd voiceflow
+git clone https://github.com/yourusername/nawknawk.git
+cd nawknawk
 ```
 
 2. Install dependencies:

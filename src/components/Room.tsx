@@ -3,7 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import styled from 'styled-components';
 import { ArrowLeft, Users, AlertCircle, Copy } from 'lucide-react';
 import BubbleCanvas from './BubbleCanvas';
-import { useVoiceflow } from '../hooks/useVoiceflow';
+import { useNawkNawk } from '../hooks/useNawkNawk';
 import webRTCService from '../services/webRTCService';
 
 const RoomContainer = styled.div`
@@ -177,7 +177,7 @@ const Room: React.FC = () => {
     localParticipant,
     connect,
     disconnect
-  } = useVoiceflow(roomId || 'default');
+  } = useNawkNawk(roomId || 'default');
 
   const handleJoin = async (e: React.FormEvent) => {
     e.preventDefault();

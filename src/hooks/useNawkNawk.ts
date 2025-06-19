@@ -4,7 +4,7 @@ import { Participant } from '../types';
 import webRTCService from '../services/webRTCService';
 import socketService from '../services/socketService';
 
-export const useVoiceflow = (roomId: string = 'room-demo-01') => {
+export const useNawkNawk = (roomId: string = 'room-demo-01') => {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);

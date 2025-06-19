@@ -57,7 +57,7 @@ This document describes the room system implementation for the NawkNawk real-tim
 
 #### Updated Services
 - **socketService**: Added join success/error event handlers
-- **useVoiceflow**: Enhanced with room-specific logic and error handling
+- **useNawkNawk**: Enhanced with room-specific logic and error handling
 
 ## Usage Flow
 
