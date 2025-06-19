@@ -261,7 +261,7 @@ const HomePage: React.FC = () => {
   return (
     <HomeContainer>
       <Header>
-        <Title>NoAwkwardness</Title>
+        <Title>NawkNawk</Title>
         <Subtitle>
           Create private video rooms for seamless conversations. 
           Drag and drop to connect with others in real-time.

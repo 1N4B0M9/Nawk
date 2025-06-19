@@ -1,6 +1,6 @@
 # Room System Implementation
 
-This document describes the room system implementation for the NoAwkwardness real-time video/audio web app.
+This document describes the room system implementation for the NawkNawk real-time video/audio web app.
 
 ## Features
 
