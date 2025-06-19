@@ -112,8 +112,8 @@ const ParticipantAvatar: React.FC<ParticipantAvatarProps> = ({
         
         {/* Participant video/avatar circle */}
         <div 
-          className={`${sizeClasses} rounded-full bg-primary-800 flex items-center justify-center relative overflow-hidden transition-all duration-300 ${
-            participant.isSpeaking ? 'ring-2 ring-primary-400' : ''
+          className={`${sizeClasses} rounded-full bg-[var(--color-bg-secondary)] flex items-center justify-center relative overflow-hidden transition-all duration-300 ${
+            participant.isSpeaking ? 'ring-2 ring-accent' : ''
           }`}
         >
           {hasVideoTrack ? (
@@ -125,12 +125,12 @@ const ParticipantAvatar: React.FC<ParticipantAvatarProps> = ({
               muted
             />
           ) : (
-            <User className="text-white" size={size === 'lg' ? 36 : size === 'md' ? 24 : 16} />
+            <User className="text-[var(--color-text)]" size={size === 'lg' ? 36 : size === 'md' ? 24 : 16} />
           )}
           
           {/* Audio level indicator (subtle background gradient) */}
           <div 
-            className="absolute inset-0 bg-gradient-to-t from-primary-600 to-transparent opacity-50 transition-all duration-200"
+            className="absolute inset-0 bg-gradient-to-t from-accent to-transparent opacity-50 transition-all duration-200"
             style={{ height: `${participant.audioLevel * 100}%` }}
           />
           
@@ -146,7 +146,7 @@ const ParticipantAvatar: React.FC<ParticipantAvatarProps> = ({
       {/* Participant name */}
       {showName && (
         <div className="mt-2 flex items-center space-x-1">
-          <span className="text-sm font-medium truncate max-w-[100px]">
+          <span className="text-sm font-medium truncate max-w-[100px] text-[var(--color-text)]">
             {participant.name}
           </span>
           {participant.isMuted ? (

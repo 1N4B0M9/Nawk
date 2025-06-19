@@ -14,7 +14,7 @@ const Button = styled.button`
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #ef4444;
+  background: var(--color-accent);
   color: white;
   padding: 1rem;
   border-radius: 9999px;
@@ -24,7 +24,7 @@ const Button = styled.button`
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 
   &:hover {
-    background: #dc2626;
+    background: var(--color-accent-hover);
     transform: scale(1.05);
   }
 

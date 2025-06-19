@@ -10,12 +10,12 @@ const VideoChatContainer = styled.div`
   gap: 1rem;
   padding: 1rem;
   height: 100vh;
-  background: #1a1a1a;
+  background: var(--color-bg);
 `;
 
 const ParticipantContainer = styled.div`
   position: relative;
-  background: #2a2a2a;
+  background: var(--color-bg-secondary);
   border-radius: 8px;
   overflow: hidden;
   aspect-ratio: 16/9;
@@ -33,7 +33,7 @@ const Avatar = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #3a3a3a;
+  background: var(--color-border);
   color: white;
   font-size: 2rem;
   font-weight: bold;
@@ -43,8 +43,8 @@ const ParticipantName = styled.div`
   position: absolute;
   bottom: 1rem;
   left: 1rem;
-  color: white;
-  background: rgba(0, 0, 0, 0.5);
+  color: var(--color-text);
+  background: rgba(0, 0, 0, 0.2);
   padding: 0.5rem;
   border-radius: 4px;
   font-size: 0.9rem;
@@ -57,7 +57,7 @@ const SpeakingIndicator = styled.div<{ isSpeaking: boolean }>`
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: ${(props: { isSpeaking: boolean }) => props.isSpeaking ? '#4CAF50' : '#666'};
+  background: ${(props: { isSpeaking: boolean }) => props.isSpeaking ? 'var(--color-accent)' : 'var(--color-border)'};
   transition: background-color 0.2s ease;
 `;
 
