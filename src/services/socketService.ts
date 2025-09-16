@@ -5,7 +5,9 @@ import { JoinRoomData, PeerSignalData } from '../types';
 const currentHost = window.location.hostname;
 const SOCKET_SERVER = currentHost.includes('webcontainer') 
   ? `http://${currentHost.replace('--5173', '--3000')}` // Replace Vite's port with Socket server port
-  : 'http://localhost:3000'; // Fallback for local development
+  : currentHost === 'nawknawk.fly.dev' 
+    ? 'https://nawknawk.fly.dev' // Production URL
+    : 'http://localhost:3000'; // Fallback for local development
 
 class SocketService {
   private socket: Socket | null = null;
