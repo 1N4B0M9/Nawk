@@ -13,73 +13,62 @@ export const useNawkNawk = (roomId: string = 'room-demo-01') => {
   const [participantCount, setParticipantCount] = useState<number>(0);
   const [maxParticipants] = useState<number>(15);
 
-  // Update participants state from service
-  const updateParticipantsState = useCallback(() => {
+  const syncParticipants = useCallback(() => {
     const allParticipants = webRTCService.getParticipants();
     const local = webRTCService.getLocalParticipant();
-    
+
     if (local) {
       setLocalParticipant(local);
-      
-      // Filter out local participant from the list
-      setParticipants(allParticipants.filter(p => p.id !== local.id));
+      setParticipants(allParticipants.filter((p) => p.id !== local.id));
     } else {
+      setLocalParticipant(null);
       setParticipants(allParticipants);
     }
   }, []);
 
-  // Connect to a room
-  const connect = useCallback(async (userName: string) => {
-    if (isConnected || isConnecting) return;
-    
-    setIsConnecting(true);
-    setError(null);
-    
-    try {
-      const userId = uuidv4();
-      
-      // Connect to socket server first
-      await socketService.connect();
-      
-      // Set up socket event listeners
-      socketService.onJoinSuccess((data) => {
-        console.log('Successfully joined room:', data);
-        setParticipantCount(data.participantCount);
-      });
-      
-      socketService.onJoinError((data) => {
-        console.error('Failed to join room:', data.error);
-        setError(data.error);
-        setIsConnecting(false);
-      });
-      
-      // Join the room
-      socketService.joinRoom({
-        roomId,
-        userId,
-        userName
-      });
-      
-      // Initialize WebRTC service
-      await webRTCService.initialize(userId, userName, roomId);
-      setIsConnected(true);
-      
-      // Start polling for participants
-      updateParticipantsState();
-    } catch (err) {
-      console.error('Failed to connect:', err);
-      setError(err instanceof Error ? err.message : 'Failed to connect');
-      setIsConnecting(false);
-    }
-  }, [isConnected, isConnecting, roomId, updateParticipantsState]);
+  useEffect(() => {
+    const unsubscribe = webRTCService.subscribe(syncParticipants);
+    return unsubscribe;
+  }, [syncParticipants]);
 
-  // Disconnect from the room
+  const connect = useCallback(
+    async (userName: string, permissions?: { hasMic: boolean; hasCamera: boolean }) => {
+      if (isConnected || isConnecting) return;
+
+      setIsConnecting(true);
+      setError(null);
+
+      try {
+        const userId = uuidv4();
+
+        await socketService.connect();
+
+        socketService.onJoinSuccess((data) => {
+          setParticipantCount(data.participantCount);
+        });
+
+        socketService.onJoinError((data) => {
+          setError(data.error);
+        });
+
+        await webRTCService.initialize(userId, userName, roomId, permissions);
+        setIsConnected(true);
+        syncParticipants();
+      } catch (err) {
+        console.error('Failed to connect:', err);
+        setError(err instanceof Error ? err.message : 'Failed to connect');
+        webRTCService.cleanup();
+      } finally {
+        setIsConnecting(false);
+      }
+    },
+    [isConnected, isConnecting, roomId, syncParticipants]
+  );
+
   const disconnect = useCallback(() => {
     if (!isConnected) return;
-    
+
     try {
-      socketService.leaveRoom();
-      socketService.disconnect();
       webRTCService.cleanup();
     } catch (err) {
       console.error('Error during cleanup:', err);
@@ -92,28 +81,15 @@ export const useNawkNawk = (roomId: string = 'room-demo-01') => {
     }
   }, [isConnected]);
 
-  // Set up polling interval to update participants state
-  useEffect(() => {
-    if (!isConnected) return;
-    
-    const interval = setInterval(() => {
-      updateParticipantsState();
-    }, 100); // Update every 100ms
-    
-    return () => clearInterval(interval);
-  }, [isConnected, updateParticipantsState]);
-
-  // Clean up on unmount
   useEffect(() => {
     return () => {
-      if (isConnected) {
-        disconnect();
-      }
-      // Clean up socket listeners
       socketService.offJoinSuccess();
       socketService.offJoinError();
+      if (isConnected) {
+        webRTCService.cleanup();
+      }
     };
-  }, [isConnected, disconnect]);
+  }, [isConnected]);
 
   return {
     isConnected,

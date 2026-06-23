@@ -1,52 +1,77 @@
 import { io, Socket } from 'socket.io-client';
 import { JoinRoomData, PeerSignalData } from '../types';
 
-// Get the current hostname and port from the window location
 const currentHost = window.location.hostname;
-const SOCKET_SERVER = currentHost.includes('webcontainer') 
-  ? `http://${currentHost.replace('--5173', '--3000')}` // Replace Vite's port with Socket server port
-  : currentHost === 'nawknawk.fly.dev' 
-    ? 'https://nawknawk.fly.dev' // Production URL
-    : 'http://localhost:3000'; // Fallback for local development
+const SOCKET_SERVER = currentHost.includes('webcontainer')
+  ? `http://${currentHost.replace('--5173', '--3000')}`
+  : currentHost === 'nawknawk.fly.dev'
+    ? 'https://nawknawk.fly.dev'
+    : 'http://localhost:3000';
 
 class SocketService {
   private socket: Socket | null = null;
   private roomId: string | null = null;
   private userId: string | null = null;
-
-  constructor() {
-    this.socket = null;
-    this.roomId = null;
-    this.userId = null;
-  }
+  private connectPromise: Promise<Socket> | null = null;
 
   connect(): Promise<Socket> {
-    return new Promise((resolve, reject) => {
+    if (this.socket?.connected) {
+      return Promise.resolve(this.socket);
+    }
+
+    if (this.connectPromise) {
+      return this.connectPromise;
+    }
+
+    this.connectPromise = new Promise((resolve, reject) => {
       try {
-        this.socket = io(SOCKET_SERVER, {
-          transports: ['websocket'],
-          reconnection: true,
-          reconnectionAttempts: 5,
-          reconnectionDelay: 1000,
-        });
+        if (!this.socket) {
+          this.socket = io(SOCKET_SERVER, {
+            transports: ['websocket'],
+            reconnection: true,
+            reconnectionAttempts: 5,
+            reconnectionDelay: 1000,
+          });
+        }
 
-        this.socket.on('connect', () => {
-          console.log('Connected to signaling server');
+        const onConnect = () => {
+          cleanup();
           resolve(this.socket as Socket);
-        });
+        };
 
-        this.socket.on('connect_error', (error) => {
-          console.error('Connection error:', error);
+        const onConnectError = (error: Error) => {
+          cleanup();
+          this.connectPromise = null;
           reject(error);
-        });
+        };
+
+        const cleanup = () => {
+          this.socket?.off('connect', onConnect);
+          this.socket?.off('connect_error', onConnectError);
+        };
+
+        if (this.socket.connected) {
+          this.connectPromise = null;
+          resolve(this.socket);
+          return;
+        }
+
+        this.socket.on('connect', onConnect);
+        this.socket.on('connect_error', onConnectError);
       } catch (error) {
-        console.error('Socket initialization error:', error);
+        this.connectPromise = null;
         reject(error);
       }
+    });
+
+    return this.connectPromise.then((socket) => {
+      this.connectPromise = null;
+      return socket;
     });
   }
 
   disconnect(): void {
+    this.connectPromise = null;
     if (this.socket) {
       this.socket.disconnect();
       this.socket = null;
@@ -59,7 +84,7 @@ class SocketService {
     if (!this.socket) {
       throw new Error('Socket not connected');
     }
-    
+
     this.roomId = data.roomId;
     this.userId = data.userId;
     this.socket.emit('join-room', data);
@@ -69,16 +94,17 @@ class SocketService {
     if (!this.socket || !this.roomId) {
       return;
     }
-    
+
     this.socket.emit('leave-room', { roomId: this.roomId, userId: this.userId });
     this.roomId = null;
+    this.userId = null;
   }
 
   signalPeer(data: PeerSignalData): void {
     if (!this.socket) {
       throw new Error('Socket not connected');
     }
-    
+
     this.socket.emit('signal', data);
   }
 
@@ -86,7 +112,7 @@ class SocketService {
     if (!this.socket) {
       throw new Error('Socket not connected');
     }
-    
+
     this.socket.on('room-participants', callback);
   }
 
@@ -94,7 +120,7 @@ class SocketService {
     if (!this.socket) {
       throw new Error('Socket not connected');
     }
-    
+
     this.socket.on('user-joined', callback);
   }
 
@@ -102,7 +128,7 @@ class SocketService {
     if (!this.socket) {
       throw new Error('Socket not connected');
     }
-    
+
     this.socket.on('user-left', callback);
   }
 
@@ -110,7 +136,7 @@ class SocketService {
     if (!this.socket) {
       throw new Error('Socket not connected');
     }
-    
+
     this.socket.on('signal', callback);
   }
 
@@ -118,7 +144,7 @@ class SocketService {
     if (!this.socket) {
       throw new Error('Socket not connected');
     }
-    
+
     this.socket.on('join-success', callback);
   }
 
@@ -126,7 +152,7 @@ class SocketService {
     if (!this.socket) {
       throw new Error('Socket not connected');
     }
-    
+
     this.socket.on('join-error', callback);
   }
 
@@ -134,11 +160,11 @@ class SocketService {
     if (!this.socket || !this.roomId || !this.userId) {
       throw new Error('Socket not connected or room not joined');
     }
-    
+
     this.socket.emit('update-position', {
       roomId: this.roomId,
       userId: this.userId,
-      position
+      position,
     });
   }
 
@@ -146,9 +172,9 @@ class SocketService {
     if (!this.socket || !this.roomId) {
       throw new Error('Socket not connected or room not joined');
     }
-    
+
     this.socket.emit('request-initial-positions', {
-      roomId: this.roomId
+      roomId: this.roomId,
     });
   }
 
@@ -156,7 +182,7 @@ class SocketService {
     if (!this.socket) {
       throw new Error('Socket not connected');
     }
-    
+
     this.socket.on('position-update', callback);
   }
 
@@ -164,51 +190,40 @@ class SocketService {
     if (!this.socket) {
       throw new Error('Socket not connected');
     }
-    
+
     this.socket.on('initial-positions', callback);
   }
 
   offPositionUpdate(): void {
-    if (!this.socket) {
-      return;
-    }
-    this.socket.off('position-update');
+    this.socket?.off('position-update');
   }
 
   offInitialPositions(): void {
-    if (!this.socket) {
-      return;
-    }
-    this.socket.off('initial-positions');
+    this.socket?.off('initial-positions');
   }
 
   offJoinSuccess(): void {
-    if (!this.socket) {
-      return;
-    }
-    this.socket.off('join-success');
+    this.socket?.off('join-success');
   }
 
   offJoinError(): void {
-    if (!this.socket) {
-      return;
-    }
-    this.socket.off('join-error');
+    this.socket?.off('join-error');
   }
 
   removeAllListeners(): void {
     if (!this.socket) {
       return;
     }
-    
+
     this.socket.removeAllListeners('room-participants');
     this.socket.removeAllListeners('user-joined');
     this.socket.removeAllListeners('user-left');
     this.socket.removeAllListeners('signal');
     this.socket.removeAllListeners('join-success');
     this.socket.removeAllListeners('join-error');
+    this.socket.removeAllListeners('position-update');
+    this.socket.removeAllListeners('initial-positions');
   }
 }
 
-// Export as singleton
 export default new SocketService();

@@ -6,6 +6,24 @@ const { Server } = require('socket.io');
 const fs = require('fs');
 const path = require('path');
 
+function resolveDistDir() {
+  const candidates = [
+    path.join(__dirname, 'dist'),
+    path.join(__dirname, '..', 'dist'),
+  ];
+
+  for (const dir of candidates) {
+    if (fs.existsSync(path.join(dir, 'index.html'))) {
+      return dir;
+    }
+  }
+
+  return candidates[0];
+}
+
+const DIST_DIR = resolveDistDir();
+const corsOrigin = process.env.CORS_ORIGIN || '*';
+
 const server = http.createServer((req, res) => {
   // Health check endpoint for Fly.io
   if (req.url === '/health') {
@@ -16,13 +34,13 @@ const server = http.createServer((req, res) => {
 
   // Serve static files from dist directory
   let filePath = req.url === '/' ? '/index.html' : req.url;
-  filePath = path.join(__dirname, 'dist', filePath);
+  filePath = path.join(DIST_DIR, filePath);
 
   // Check if file exists
   fs.access(filePath, fs.constants.F_OK, (err) => {
     if (err) {
       // File not found, serve index.html for SPA routing
-      const indexPath = path.join(__dirname, 'dist', 'index.html');
+      const indexPath = path.join(DIST_DIR, 'index.html');
       fs.readFile(indexPath, (err, data) => {
         if (err) {
           res.writeHead(404, { 'Content-Type': 'text/plain' });
@@ -68,7 +86,7 @@ const server = http.createServer((req, res) => {
 
 const io = new Server(server, {
   cors: {
-    origin: '*',
+    origin: corsOrigin,
     methods: ['GET', 'POST']
   }
 });

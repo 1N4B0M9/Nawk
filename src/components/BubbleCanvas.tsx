@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import styled from 'styled-components';
 import { Participant } from '../types';
 import socketService from '../services/socketService';
-import { PhoneOff } from 'lucide-react';
+import { PhoneOff, MicOff, VideoOff } from 'lucide-react';
 
 const CONVERSATION_THRESHOLD = 200; // Distance threshold for conversations in pixels
 const BUBBLE_DIAMETER = 150; // Bubble size in pixels
@@ -18,7 +18,7 @@ const CanvasContainer = styled.div`
   overflow: hidden;
 `;
 
-const ConnectionLine = styled.div<{ x1: number; y1: number; x2: number; y2: number }>`
+const ConnectionLine = styled.div<{ $x1: number; $y1: number; $x2: number; $y2: number }>`
   position: absolute;
   top: 0;
   left: 0;
@@ -29,34 +29,34 @@ const ConnectionLine = styled.div<{ x1: number; y1: number; x2: number; y2: numb
   &::before {
     content: '';
     position: absolute;
-    top: ${props => props.y1}px;
-    left: ${props => props.x1}px;
-    width: ${props => Math.sqrt(Math.pow(props.x2 - props.x1, 2) + Math.pow(props.y2 - props.y1, 2))}px;
+    top: ${props => props.$y1}px;
+    left: ${props => props.$x1}px;
+    width: ${props => Math.sqrt(Math.pow(props.$x2 - props.$x1, 2) + Math.pow(props.$y2 - props.$y1, 2))}px;
     height: 2px;
     background: rgba(76, 175, 80, 0.3);
     transform-origin: 0 0;
-    transform: rotate(${props => Math.atan2(props.y2 - props.y1, props.x2 - props.x1)}rad);
+    transform: rotate(${props => Math.atan2(props.$y2 - props.$y1, props.$x2 - props.$x1)}rad);
   }
 `;
 
-const Bubble = styled.div<{ x: number; y: number; isDragging: boolean; isConnected: boolean }>`
+const Bubble = styled.div<{ $x: number; $y: number; $isDragging: boolean; $isConnected: boolean }>`
   position: absolute;
   width: 150px;
   height: 150px;
   border-radius: 50%;
   background: var(--color-bg-secondary);
   cursor: grab;
-  transform: translate(${props => props.x}px, ${props => props.y}px);
-  transition: ${props => props.isDragging ? 'none' : 'transform 0.3s ease'};
+  transform: translate(${props => props.$x}px, ${props => props.$y}px);
+  transition: ${props => props.$isDragging ? 'none' : 'transform 0.3s ease'};
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  border: 3px solid ${props => props.isConnected ? 'var(--color-accent)' : 'var(--color-border)'};
-  box-shadow: 0 0 20px ${props => props.isConnected ? 'var(--color-accent)' : 'transparent'};
+  border: 3px solid ${props => props.$isConnected ? 'var(--color-accent)' : 'var(--color-border)'};
+  box-shadow: 0 0 20px ${props => props.$isConnected ? 'var(--color-accent)' : 'transparent'};
   
   &:hover {
-    border-color: ${props => props.isConnected ? 'var(--color-accent-hover)' : 'var(--color-border)'};
+    border-color: ${props => props.$isConnected ? 'var(--color-accent-hover)' : 'var(--color-border)'};
   }
 
   &::before {
@@ -64,7 +64,7 @@ const Bubble = styled.div<{ x: number; y: number; isDragging: boolean; isConnect
     position: absolute;
     width: ${CONVERSATION_THRESHOLD}px;
     height: ${CONVERSATION_THRESHOLD}px;
-    border: 2px dashed ${props => props.isDragging ? 'var(--color-accent)' : 'transparent'};
+    border: 2px dashed ${props => props.$isDragging ? 'var(--color-accent)' : 'transparent'};
     border-radius: 50%;
     top: 50%;
     left: 50%;
@@ -82,28 +82,53 @@ const VideoPreview = styled.video`
   background: var(--color-border);
 `;
 
-const ParticipantName = styled.div`
-  position: absolute;
-  bottom: -25px;
-  left: 50%;
-  transform: translateX(-50%);
-  color: var(--color-text);
-  background: rgba(0, 0, 0, 0.2);
-  padding: 4px 8px;
-  border-radius: 12px;
-  font-size: 0.9rem;
-  white-space: nowrap;
-`;
-
-const SpeakingIndicator = styled.div<{ isSpeaking: boolean }>`
+const SpeakingIndicator = styled.div<{ $isSpeaking: boolean }>`
   position: absolute;
   top: 5px;
   right: 5px;
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: ${props => props.isSpeaking ? 'var(--color-accent)' : 'var(--color-border)'};
+  background: ${props => props.$isSpeaking ? 'var(--color-accent)' : 'var(--color-border)'};
   transition: background-color 0.2s ease;
+`;
+
+const PermissionBadge = styled.div<{ $position: 'mic' | 'camera' }>`
+  position: absolute;
+  ${props => props.$position === 'mic' 
+    ? 'top: 5px; left: 5px; background: #ef4444;'
+    : 'top: 5px; right: 5px; background: var(--color-bg-secondary);'
+  }
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: white;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid ${props => props.$position === 'mic' ? '#dc2626' : 'var(--color-border)'};
+`;
+
+const ParticipantNameContainer = styled.div`
+  position: absolute;
+  bottom: -25px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+`;
+
+const ParticipantNameStyled = styled.div`
+  color: var(--color-text);
+  background: rgba(0, 0, 0, 0.2);
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  white-space: nowrap;
 `;
 
 const HangupButton = styled.button`
@@ -214,7 +239,7 @@ const BubbleCanvas: React.FC<Props> = ({ participants, localParticipant, onUpdat
   const calculateSnapPosition = (currentPos: Position, bubbleId: string, isFinalSnap: boolean = false): Position => {
     let snapX = currentPos.x;
     let snapY = currentPos.y;
-    let totalForce = { x: 0, y: 0 };
+    const totalForce = { x: 0, y: 0 };
     let nearestBubble: NearestBubble | null = null;
 
     // Get all other bubble positions
@@ -319,44 +344,7 @@ const BubbleCanvas: React.FC<Props> = ({ participants, localParticipant, onUpdat
     };
   };
 
-  // Animate bubble movement
-  const animateBubblePosition = (bubbleId: string, targetPos: Position) => {
-    const currentPos = positions[bubbleId];
-    if (!currentPos) return;
-
-    const dx = targetPos.x - currentPos.x;
-    const dy = targetPos.y - currentPos.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-
-    if (distance < 0.1) {
-      setPositions(prev => ({
-        ...prev,
-        [bubbleId]: targetPos
-      }));
-      return;
-    }
-
-    const newPos = {
-      x: currentPos.x + dx * 0.2,
-      y: currentPos.y + dy * 0.2
-    };
-
-    setPositions(prev => ({
-      ...prev,
-      [bubbleId]: newPos
-    }));
-
-    // Emit position update
-    if (bubbleId === localParticipant?.id) {
-      socketService.updatePosition(newPos);
-    }
-
-    animationFrame.current = requestAnimationFrame(() => 
-      animateBubblePosition(bubbleId, targetPos)
-    );
-  };
-
-  // Listen for position updates from other participants
+  // Initialize positions for new participants
   useEffect(() => {
     socketService.onPositionUpdate(({ userId, position }) => {
       // Immediately update position without animation for other participants
@@ -579,10 +567,10 @@ const BubbleCanvas: React.FC<Props> = ({ participants, localParticipant, onUpdat
         return (
           <ConnectionLine
             key={`connection-${participantId}`}
-            x1={localPos.x + BUBBLE_DIAMETER/2}
-            y1={localPos.y + BUBBLE_DIAMETER/2}
-            x2={participantPos.x + BUBBLE_DIAMETER/2}
-            y2={participantPos.y + BUBBLE_DIAMETER/2}
+            $x1={localPos.x + BUBBLE_DIAMETER/2}
+            $y1={localPos.y + BUBBLE_DIAMETER/2}
+            $x2={participantPos.x + BUBBLE_DIAMETER/2}
+            $y2={participantPos.y + BUBBLE_DIAMETER/2}
           />
         );
       })}
@@ -590,14 +578,16 @@ const BubbleCanvas: React.FC<Props> = ({ participants, localParticipant, onUpdat
       {/* Render bubbles */}
       {[...participants, ...(localParticipant ? [localParticipant] : [])].map(participant => {
         const isConnected = connectedParticipants.includes(participant.id) || participant.id === localParticipant?.id;
+        const hasMic = participant.hasMicPermission !== false;
+        const hasCamera = participant.hasCameraPermission !== false;
         
         return (
           <Bubble
             key={participant.id}
-            x={positions[participant.id]?.x || 0}
-            y={positions[participant.id]?.y || 0}
-            isDragging={dragging === participant.id}
-            isConnected={isConnected}
+            $x={positions[participant.id]?.x || 0}
+            $y={positions[participant.id]?.y || 0}
+            $isDragging={dragging === participant.id}
+            $isConnected={isConnected}
             onMouseDown={(e) => handleMouseDown(e, participant.id)}
           >
             <VideoPreview
@@ -606,8 +596,27 @@ const BubbleCanvas: React.FC<Props> = ({ participants, localParticipant, onUpdat
               playsInline
               muted={participant.id === localParticipant?.id || !isConnected}
             />
-            <ParticipantName>{participant.name}</ParticipantName>
-            <SpeakingIndicator isSpeaking={participant.isSpeaking && isConnected} />
+            
+            {/* Permission indicators */}
+            {!hasMic && (
+              <PermissionBadge $position="mic">
+                <MicOff size={14} />
+                No Mic
+              </PermissionBadge>
+            )}
+            
+            {!hasCamera && (
+              <PermissionBadge $position="camera">
+                <VideoOff size={14} />
+                No Camera
+              </PermissionBadge>
+            )}
+            
+            <SpeakingIndicator $isSpeaking={participant.isSpeaking && isConnected} />
+            
+            <ParticipantNameContainer>
+              <ParticipantNameStyled>{participant.name}</ParticipantNameStyled>
+            </ParticipantNameContainer>
           </Bubble>
         );
       })}

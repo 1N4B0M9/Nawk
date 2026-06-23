@@ -4,16 +4,21 @@ export interface Participant {
   isSpeaking: boolean;
   audioLevel: number;
   stream?: MediaStream;
+  hasMicPermission?: boolean;
+  hasCameraPermission?: boolean;
+  isMuted?: boolean;
+  position?: {
+    x: number;
+    y: number;
+  };
 }
 
-// Import SimplePeer's SignalData type
-import { SignalData as SimplePeerSignalData } from 'simple-peer';
-export type SignalData = SimplePeerSignalData;
+export type SignalData = RTCSessionDescriptionInit | RTCIceCandidateInit;
 
 export interface PeerSignalData {
-  signal: SignalData;
   from: string;
   to: string;
+  signal: SignalData;
 }
 
 export interface JoinRoomData {
@@ -25,6 +30,14 @@ export interface JoinRoomData {
 export interface RoomData {
   roomId: string;
   participants: Participant[];
+}
+
+export interface PositionData {
+  userId: string;
+  position: {
+    x: number;
+    y: number;
+  };
 }
 
 export interface AudioProcessingOptions {

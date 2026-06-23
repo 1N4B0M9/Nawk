@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import styled from 'styled-components';
 import { ArrowLeft, Users, AlertCircle, Copy } from 'lucide-react';
 import BubbleCanvas from './BubbleCanvas';
+import PreRoomScreen from './PreRoomScreen';
 import { useNawkNawk } from '../hooks/useNawkNawk';
 import webRTCService from '../services/webRTCService';
 
@@ -30,28 +31,6 @@ const JoinForm = styled.div`
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   max-width: 400px;
   width: 90%;
-`;
-
-const BackButton = styled.button`
-  position: fixed;
-  top: 1rem;
-  left: 1rem;
-  z-index: 200;
-  background: var(--color-bg-secondary);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  padding: 0.5rem 1rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  transition: all 0.2s ease;
-  
-  &:hover {
-    background: var(--color-accent);
-    color: white;
-  }
 `;
 
 const Input = styled.input`
@@ -160,6 +139,12 @@ const Room: React.FC = () => {
   const [maxParticipants] = useState<number>(15);
   const [isHost, setIsHost] = useState<boolean>(false);
   const [copied, setCopied] = useState(false);
+  const [permissions, setPermissions] = useState<{ hasMic: boolean; hasCamera: boolean } | null>(null);
+  const [showPreRoom, setShowPreRoom] = useState(true);
+
+  const handleBackToNameEntry = () => {
+    setShowPreRoom(false);
+  };
 
   // Get userName and isHost from location state if coming from homepage
   useEffect(() => {
@@ -181,18 +166,47 @@ const Room: React.FC = () => {
 
   const handleJoin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!userName.trim() || !roomId) return;
+    if (!userName.trim() || userName.trim().length < 2 || !roomId) {
+      setError('Please enter a name with at least 2 characters');
+      return;
+    }
+
+    // If we're in pre-room mode, don't join yet
+    if (showPreRoom) {
+      return;
+    }
+
+    if (!permissions) {
+      setError('Please test your media first');
+      setShowPreRoom(true);
+      return;
+    }
 
     setIsConnecting(true);
     setError(null);
 
     try {
-      await connect(userName);
+      await connect(userName, permissions);
     } catch (err) {
       console.error('Failed to join room:', err);
       setError(err instanceof Error ? err.message : 'Failed to join room');
     } finally {
       setIsConnecting(false);
+    }
+  };
+
+  const handlePreRoomJoin = (perms: { hasMic: boolean; hasCamera: boolean }) => {
+    setPermissions(perms);
+    setShowPreRoom(false);
+    
+    // Only auto-join if we have a valid name (more than 1 character) and came from homepage
+    if (userName.trim() && userName.trim().length > 1 && location.state?.userName) {
+      setIsConnecting(true);
+      connect(userName, perms).catch(err => {
+        console.error('Failed to join room:', err);
+        setError(err instanceof Error ? err.message : 'Failed to join room');
+        setIsConnecting(false);
+      });
     }
   };
 
@@ -250,6 +264,19 @@ const Room: React.FC = () => {
     );
   }
 
+  // Show pre-room screen if not connected and showPreRoom is true
+  if (!isConnected && showPreRoom && userName) {
+    return (
+      <PreRoomScreen
+        userName={userName}
+        roomId={roomId || ''}
+        isHost={isHost}
+        onJoin={handlePreRoomJoin}
+        onBack={handleBackToNameEntry}
+      />
+    );
+  }
+
   return (
     <RoomContainer>
       {isConnected && (
@@ -300,8 +327,8 @@ const Room: React.FC = () => {
               disabled={isConnecting}
               autoFocus
             />
-            <Button type="submit" disabled={!userName.trim() || isConnecting}>
-              {isConnecting ? 'Joining...' : 'Join Room'}
+            <Button type="submit" disabled={!userName.trim() || userName.trim().length < 2 || isConnecting}>
+              {isConnecting ? 'Joining...' : 'Continue'}
             </Button>
           </form>
         </JoinForm>

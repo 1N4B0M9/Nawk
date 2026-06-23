@@ -15,6 +15,7 @@ class AudioService {
     gainControl: true,
     echoCancellation: true,
   };
+  private hasMicPermission: boolean = false;
 
   constructor() {
     this.audioContext = null;
@@ -45,11 +46,18 @@ class AudioService {
         video: false,
       });
       
+      this.hasMicPermission = true;
       return this.processAudioStream(stream);
     } catch (error) {
       console.error('Error getting user media:', error);
-      throw error;
+      this.hasMicPermission = false;
+      // Return an empty MediaStream when mic access is not available
+      return new MediaStream();
     }
+  }
+
+  getMicPermission(): boolean {
+    return this.hasMicPermission;
   }
 
   processAudioStream(stream: MediaStream): MediaStream {

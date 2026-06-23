@@ -5,12 +5,26 @@ import socketService from './socketService';
 import audioService from './audioService';
 import videoService from './videoService';
 
-// Polyfill for process.nextTick
-if (typeof window !== 'undefined' && !window.process) {
-  interface WindowWithProcess extends Window {
-    process: { env: Record<string, string> };
+type ParticipantChangeListener = () => void;
+
+function buildIceServers(): RTCIceServer[] {
+  const iceServers: RTCIceServer[] = [
+    { urls: 'stun:stun.l.google.com:19302' },
+  ];
+
+  const turnUrl = import.meta.env.VITE_TURN_URL;
+  const turnUsername = import.meta.env.VITE_TURN_USERNAME;
+  const turnCredential = import.meta.env.VITE_TURN_CREDENTIAL;
+
+  if (turnUrl && turnUsername && turnCredential) {
+    iceServers.push({
+      urls: turnUrl,
+      username: turnUsername,
+      credential: turnCredential,
+    });
   }
-  (window as WindowWithProcess).process = { env: {} };
+
+  return iceServers;
 }
 
 class WebRTCService {
@@ -18,73 +32,70 @@ class WebRTCService {
   private connections: Map<string, MediaConnectionType> = new Map();
   private localStream: MediaStream | null = null;
   private participants: Map<string, Participant> = new Map();
+  private listeners: Set<ParticipantChangeListener> = new Set();
   private userId: string = '';
-  private userName: string = '';
-  private roomId: string = '';
   private isConnected: boolean = false;
   private connectedParticipants: Set<string> = new Set();
+  private vadIntervalId: ReturnType<typeof setInterval> | null = null;
 
-  constructor() {
-    this.peer = null;
-    this.connections = new Map();
-    this.localStream = null;
-    this.participants = new Map();
-    this.isConnected = false;
+  subscribe(listener: ParticipantChangeListener): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
   }
 
-  async initialize(userId: string, userName: string, roomId: string): Promise<void> {
+  private notifyParticipantsChanged(): void {
+    this.listeners.forEach((listener) => listener());
+  }
+
+  async initialize(
+    userId: string,
+    userName: string,
+    roomId: string,
+    permissions?: { hasMic: boolean; hasCamera: boolean }
+  ): Promise<void> {
     this.userId = userId;
-    this.userName = userName;
-    this.roomId = roomId;
-    
+
     try {
-      // Initialize audio service
       await audioService.initialize();
-      
-      // Get local media streams
+
       const audioStream = await audioService.getUserMedia();
       const videoStream = await videoService.getUserMedia();
-      
-      // Combine audio and video streams
+
       this.localStream = new MediaStream([
         ...audioStream.getTracks(),
-        ...videoStream.getTracks()
+        ...videoStream.getTracks(),
       ]);
 
-      // Ensure all tracks are enabled
-      this.localStream.getTracks().forEach(track => {
+      this.localStream.getTracks().forEach((track) => {
         track.enabled = true;
       });
-      
-      // Add local participant
+
+      const hasMic = permissions?.hasMic ?? audioService.getMicPermission();
+      const hasCamera = permissions?.hasCamera ?? videoService.getCameraPermission();
+
       this.participants.set(userId, {
         id: userId,
         name: userName,
         isSpeaking: false,
         audioLevel: 0,
-        stream: this.localStream
+        stream: this.localStream,
+        hasMicPermission: hasMic,
+        hasCameraPermission: hasCamera,
       });
-      
-      // Set up voice activity detection
+      this.notifyParticipantsChanged();
+
       this.startVoiceActivityDetection();
-      
-      // Initialize PeerJS
       await this.initializePeer();
-      
-      // Connect to signaling server
       await socketService.connect();
-      
-      // Set up socket event listeners
       this.setupSocketListeners();
-      
-      // Join the room
+
       socketService.joinRoom({
         roomId,
         userId,
         userName,
       });
-      
-      console.log('WebRTC service initialized');
     } catch (error) {
       console.error('Failed to initialize WebRTC service:', error);
       throw error;
@@ -95,17 +106,10 @@ class WebRTCService {
     return new Promise((resolve, reject) => {
       try {
         this.peer = new Peer(this.userId, {
-          debug: 3,
+          debug: import.meta.env.DEV ? 2 : 0,
           config: {
-            iceServers: [
-              { urls: 'stun:stun.l.google.com:19302' },
-              {
-                urls: 'turn:numb.viagenie.ca',
-                username: 'webrtc@live.com',
-                credential: 'muazkh'
-              }
-            ]
-          }
+            iceServers: buildIceServers(),
+          },
         });
 
         this.peer.on('open', (id: string) => {
@@ -115,8 +119,6 @@ class WebRTCService {
         });
 
         this.peer.on('call', (call: MediaConnectionType) => {
-          console.log('Receiving call from:', call.peer);
-          
           if (this.localStream) {
             call.answer(this.localStream);
             this.handleCall(call);
@@ -131,7 +133,6 @@ class WebRTCService {
         });
 
         this.peer.on('disconnected', () => {
-          console.log('PeerJS disconnected, attempting to reconnect...');
           this.peer?.reconnect();
         });
 
@@ -140,7 +141,6 @@ class WebRTCService {
             reject(new Error('PeerJS connection timeout'));
           }
         }, 10000);
-
       } catch (error) {
         reject(error);
       }
@@ -149,21 +149,15 @@ class WebRTCService {
 
   private handleCall(call: MediaConnectionType): void {
     const peerId = call.peer;
-    
-    this.closeConnection(peerId);
-    
-    console.log('Setting up new call with:', peerId);
+
+    this.closeConnection(peerId, false);
     this.connections.set(peerId, call);
 
     call.on('stream', (remoteStream: MediaStream) => {
-      console.log('Received stream from:', peerId);
-      
       const participant = this.participants.get(peerId);
       if (participant) {
-        // Create a new MediaStream to avoid reference issues
         const newStream = new MediaStream();
-        remoteStream.getTracks().forEach(track => {
-          // Start with audio disabled until proximity is established
+        remoteStream.getTracks().forEach((track) => {
           if (track.kind === 'audio') {
             track.enabled = false;
           }
@@ -173,13 +167,13 @@ class WebRTCService {
         this.participants.set(peerId, {
           ...participant,
           stream: newStream,
-          isSpeaking: false
+          isSpeaking: false,
         });
+        this.notifyParticipantsChanged();
       }
     });
 
     call.on('close', () => {
-      console.log('Call closed with:', peerId);
       this.closeConnection(peerId);
     });
 
@@ -191,8 +185,9 @@ class WebRTCService {
   }
 
   private setupSocketListeners(): void {
-    socketService.onRoomParticipants(participants => {
-      console.log('Received room participants:', participants);
+    socketService.onRoomParticipants((participants) => {
+      let changed = false;
+
       participants.forEach(({ userId, userName }) => {
         if (userId !== this.userId) {
           if (!this.participants.has(userId)) {
@@ -200,16 +195,20 @@ class WebRTCService {
               id: userId,
               name: userName,
               isSpeaking: false,
-              audioLevel: 0
+              audioLevel: 0,
             });
+            changed = true;
           }
           setTimeout(() => this.callPeer(userId), 1000);
         }
       });
+
+      if (changed) {
+        this.notifyParticipantsChanged();
+      }
     });
 
     socketService.onUserJoined(({ userId, userName }) => {
-      console.log(`User joined: ${userName} (${userId})`);
       if (userId === this.userId) return;
 
       if (!this.participants.has(userId)) {
@@ -217,30 +216,26 @@ class WebRTCService {
           id: userId,
           name: userName,
           isSpeaking: false,
-          audioLevel: 0
+          audioLevel: 0,
         });
+        this.notifyParticipantsChanged();
       }
     });
 
     socketService.onUserLeft(({ userId }) => {
-      console.log(`User left: ${userId}`);
       this.closeConnection(userId);
-      this.participants.delete(userId);
+      if (this.participants.delete(userId)) {
+        this.notifyParticipantsChanged();
+      }
     });
   }
 
   private callPeer(peerId: string): void {
     if (!this.peer || !this.localStream || !this.isConnected) {
-      console.warn('Cannot call peer, prerequisites not met:', {
-        hasPeer: !!this.peer,
-        hasLocalStream: !!this.localStream,
-        isConnected: this.isConnected
-      });
       return;
     }
 
     try {
-      console.log('Calling peer:', peerId);
       const call = this.peer.call(peerId, this.localStream);
       this.handleCall(call);
     } catch (error) {
@@ -249,7 +244,7 @@ class WebRTCService {
     }
   }
 
-  private closeConnection(peerId: string): void {
+  private closeConnection(peerId: string, notify = true): void {
     const connection = this.connections.get(peerId);
     if (connection) {
       try {
@@ -262,7 +257,7 @@ class WebRTCService {
 
     const participant = this.participants.get(peerId);
     if (participant?.stream) {
-      participant.stream.getTracks().forEach(track => {
+      participant.stream.getTracks().forEach((track) => {
         try {
           track.stop();
         } catch (error) {
@@ -271,29 +266,41 @@ class WebRTCService {
       });
       this.participants.set(peerId, {
         ...participant,
-        stream: undefined
+        stream: undefined,
       });
+      if (notify) {
+        this.notifyParticipantsChanged();
+      }
     }
   }
 
   private startVoiceActivityDetection(): void {
-    const detectInterval = setInterval(() => {
+    if (this.vadIntervalId) {
+      clearInterval(this.vadIntervalId);
+    }
+
+    this.vadIntervalId = setInterval(() => {
       if (!this.localStream) {
-        clearInterval(detectInterval);
         return;
       }
-      
+
       const audioLevel = audioService.getAudioLevel();
-      
       const localParticipant = this.participants.get(this.userId);
+
       if (localParticipant) {
         const isSpeaking = audioLevel > 0.1;
-        
-        this.participants.set(this.userId, {
-          ...localParticipant,
-          audioLevel,
-          isSpeaking,
-        });
+
+        if (
+          localParticipant.audioLevel !== audioLevel ||
+          localParticipant.isSpeaking !== isSpeaking
+        ) {
+          this.participants.set(this.userId, {
+            ...localParticipant,
+            audioLevel,
+            isSpeaking,
+          });
+          this.notifyParticipantsChanged();
+        }
       }
     }, 100);
   }
@@ -307,77 +314,54 @@ class WebRTCService {
   }
 
   cleanup(): void {
-    this.connections.forEach(connection => {
+    if (this.vadIntervalId) {
+      clearInterval(this.vadIntervalId);
+      this.vadIntervalId = null;
+    }
+
+    this.connections.forEach((connection) => {
       connection.close();
     });
     this.connections.clear();
-    
+
     if (this.peer) {
       this.peer.destroy();
       this.peer = null;
     }
-    
+
     audioService.cleanup();
     videoService.cleanup();
-    
+
     if (this.localStream) {
       this.localStream.getTracks().forEach((track) => {
         track.stop();
       });
       this.localStream = null;
     }
-    
+
     socketService.removeAllListeners();
     socketService.leaveRoom();
     socketService.disconnect();
-    
+
     this.participants.clear();
+    this.connectedParticipants.clear();
+    this.isConnected = false;
+    this.notifyParticipantsChanged();
   }
 
   updateConnections(connectedParticipants: string[]): void {
-    // Convert array to Set for efficient lookups
     const newConnections = new Set(connectedParticipants);
-    
-    // Handle disconnections
-    this.connectedParticipants.forEach(participantId => {
-      if (!newConnections.has(participantId)) {
-        // Participant is no longer in range, mute their audio
-        const participant = this.participants.get(participantId);
-        if (participant?.stream) {
-          participant.stream.getAudioTracks().forEach(track => {
-            track.enabled = false;
-          });
-        }
-      }
-    });
-
-    // Handle new connections
-    newConnections.forEach(participantId => {
-      if (!this.connectedParticipants.has(participantId)) {
-        // New participant in range, unmute their audio
-        const participant = this.participants.get(participantId);
-        if (participant?.stream) {
-          participant.stream.getAudioTracks().forEach(track => {
-            track.enabled = true;
-          });
-        }
-      }
-    });
-
-    // Update the set of connected participants
     this.connectedParticipants = newConnections;
 
-    // Update participant states - enable audio for all connected participants
     this.participants.forEach((participant, id) => {
       if (participant.stream) {
-        const isConnected = id === this.userId || newConnections.has(id);
-        participant.stream.getAudioTracks().forEach(track => {
-          track.enabled = isConnected;
+        const isInRange = id === this.userId || newConnections.has(id);
+        participant.stream.getAudioTracks().forEach((track) => {
+          track.enabled = isInRange;
         });
       }
     });
   }
 }
 
-// Export as singleton
 export default new WebRTCService();

@@ -1,6 +1,7 @@
 class VideoService {
   private stream: MediaStream | null = null;
   private hasAccess: boolean = false;
+  private hasCameraPermission: boolean = false;
 
   async getUserMedia(): Promise<MediaStream> {
     try {
@@ -12,10 +13,12 @@ class VideoService {
         }
       });
       this.hasAccess = true;
+      this.hasCameraPermission = true;
       return this.stream;
     } catch (error) {
       console.warn('Could not access camera:', error);
       this.hasAccess = false;
+      this.hasCameraPermission = false;
       // Return an empty MediaStream when camera access is not available
       return new MediaStream();
     }
@@ -23,6 +26,10 @@ class VideoService {
 
   hasVideoAccess(): boolean {
     return this.hasAccess;
+  }
+
+  getCameraPermission(): boolean {
+    return this.hasCameraPermission;
   }
 
   cleanup(): void {

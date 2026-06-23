@@ -55,14 +55,14 @@ const ModeToggle = styled.div`
   margin-bottom: 1.5rem;
 `;
 
-const ToggleButton = styled.button<{ active: boolean }>`
+const ToggleButton = styled.button<{ $active: boolean }>`
   flex: 1;
   padding: 0.75rem;
   border: none;
   border-radius: 6px;
-  background: ${props => props.active ? 'var(--color-accent)' : 'transparent'};
-  color: ${props => props.active ? 'white' : 'var(--color-text-secondary)'};
-  font-weight: ${props => props.active ? '600' : '400'};
+  background: ${props => props.$active ? 'var(--color-accent)' : 'transparent'};
+  color: ${props => props.$active ? 'white' : 'var(--color-text-secondary)'};
+  font-weight: ${props => props.$active ? '600' : '400'};
   cursor: pointer;
   transition: all 0.2s ease;
   display: flex;
@@ -71,7 +71,7 @@ const ToggleButton = styled.button<{ active: boolean }>`
   gap: 0.5rem;
   
   &:hover {
-    background: ${props => props.active ? 'var(--color-accent-hover)' : 'rgba(139, 92, 246, 0.1)'};
+    background: ${props => props.$active ? 'var(--color-accent-hover)' : 'rgba(139, 92, 246, 0.1)'};
   }
 `;
 
@@ -271,14 +271,14 @@ const HomePage: React.FC = () => {
       <Card>
         <ModeToggle>
           <ToggleButton 
-            active={mode === 'create'} 
+            $active={mode === 'create'} 
             onClick={() => handleModeChange('create')}
           >
             <Plus size={16} />
             Create Room
           </ToggleButton>
           <ToggleButton 
-            active={mode === 'join'} 
+            $active={mode === 'join'} 
             onClick={() => handleModeChange('join')}
           >
             <Users size={16} />
